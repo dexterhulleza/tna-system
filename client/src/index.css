@@ -52,13 +52,13 @@
   --chart-3: var(--color-blue-600);
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
+  --radius: 0.5rem;
+  --background: oklch(0.98 0.005 240);
+  --foreground: oklch(0.15 0.02 240);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
+  --card-foreground: oklch(0.15 0.02 240);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
+  --popover-foreground: oklch(0.15 0.02 240);
   --secondary: oklch(0.98 0.001 286.375);
   --secondary-foreground: oklch(0.4 0.015 65);
   --muted: oklch(0.967 0.001 286.375);
@@ -70,12 +70,12 @@
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --sidebar: oklch(0.18 0.04 255);
+  --sidebar-foreground: oklch(0.92 0.02 240);
+  --sidebar-accent: oklch(0.28 0.06 255);
+  --sidebar-accent-foreground: oklch(0.92 0.02 240);
+  --sidebar-border: oklch(0.28 0.05 255);
+  --sidebar-ring: oklch(0.65 0.14 255);
 }
 
 .dark {
@@ -119,6 +119,10 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "Inter", sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Plus Jakarta Sans", sans-serif;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -131,6 +135,19 @@
   input[type="radio"]:not(:disabled) {
     @apply cursor-pointer;
   }
+}
+
+@layer utilities {
+  .font-display { font-family: "Plus Jakarta Sans", sans-serif; }
+  .gap-critical { @apply text-red-600 bg-red-50 border-red-200; }
+  .gap-high { @apply text-orange-600 bg-orange-50 border-orange-200; }
+  .gap-moderate { @apply text-yellow-600 bg-yellow-50 border-yellow-200; }
+  .gap-low { @apply text-blue-600 bg-blue-50 border-blue-200; }
+  .gap-none { @apply text-green-600 bg-green-50 border-green-200; }
+  .priority-critical { @apply text-red-700 bg-red-100; }
+  .priority-high { @apply text-orange-700 bg-orange-100; }
+  .priority-medium { @apply text-yellow-700 bg-yellow-100; }
+  .priority-low { @apply text-green-700 bg-green-100; }
 }
 
 @layer components {

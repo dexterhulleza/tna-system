@@ -5,33 +5,48 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import SurveyStart from "./pages/survey/SurveyStart";
+import SurveyQuestions from "./pages/survey/SurveyQuestions";
+import SurveyReport from "./pages/survey/SurveyReport";
+import SurveyHistory from "./pages/survey/SurveyHistory";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminQuestions from "./pages/admin/AdminQuestions";
+import AdminSectors from "./pages/admin/AdminSectors";
+import AdminReports from "./pages/admin/AdminReports";
+import ProfileSetup from "./pages/ProfileSetup";
+import Dashboard from "./pages/Dashboard";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
+      <Route path="/" component={Home} />
+      <Route path="/profile-setup" component={ProfileSetup} />
+      <Route path="/dashboard" component={Dashboard} />
+      {/* Survey flow */}
+      <Route path="/survey/start" component={SurveyStart} />
+      <Route path="/survey/:surveyId/questions" component={SurveyQuestions} />
+      <Route path="/survey/:surveyId/report" component={SurveyReport} />
+      <Route path="/survey/history" component={SurveyHistory} />
+      {/* Admin panel */}
+      <Route path="/admin" component={AdminDashboard} />
+      <Route path="/admin/users" component={AdminUsers} />
+      <Route path="/admin/questions" component={AdminQuestions} />
+      <Route path="/admin/sectors" component={AdminSectors} />
+      <Route path="/admin/reports" component={AdminReports} />
+      {/* Fallback */}
+      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          <Toaster />
+          <Toaster richColors position="top-right" />
           <Router />
         </TooltipProvider>
       </ThemeProvider>
