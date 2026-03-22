@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, AlertCircle } from "lucide-react";
-import { useRef } from "react";
+import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { useRef, useMemo } from "react";
 
 const CATEGORIES = [
   { value: "organizational", label: "Organizational-Level" },
@@ -77,9 +77,16 @@ export default function AdminQuestions() {
   const [filterSector, setFilterSector] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterGroup, setFilterGroup] = useState<string>("all");
+
+  // Reset to page 1 whenever any filter changes
+  const handleFilterSector = (v: string) => { setFilterSector(v); setCurrentPage(1); };
+  const handleFilterCategory = (v: string) => { setFilterCategory(v); setCurrentPage(1); };
+  const handleFilterGroup = (v: string) => { setFilterGroup(v); setCurrentPage(1); };
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [optionInput, setOptionInput] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [showBatchDialog, setShowBatchDialog] = useState(false);
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [batchUploading, setBatchUploading] = useState(false);
@@ -153,11 +160,21 @@ export default function AdminQuestions() {
   };
 
   // Client-side group filter (since backend getQuestions filters by group differently)
-  const filteredQuestions = filterGroup === "all"
-    ? questions
-    : filterGroup === "none"
-    ? questions?.filter((q: any) => !q.groupId)
-    : questions?.filter((q: any) => String(q.groupId) === filterGroup);
+  const filteredQuestions = useMemo(() => {
+    const base = filterGroup === "all"
+      ? questions
+      : filterGroup === "none"
+      ? questions?.filter((q: any) => !q.groupId)
+      : questions?.filter((q: any) => String(q.groupId) === filterGroup);
+    return base ?? [];
+  }, [questions, filterGroup]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedQuestions = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredQuestions.slice(start, start + pageSize);
+  }, [filteredQuestions, safePage, pageSize]);
 
   const handleBatchUpload = async () => {
     if (!batchFile) { toast.error("Please select a file"); return; }
@@ -200,7 +217,7 @@ export default function AdminQuestions() {
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <Filter className="w-4 h-4 text-muted-foreground" />
-        <Select value={filterSector} onValueChange={setFilterSector}>
+        <Select value={filterSector} onValueChange={handleFilterSector}>
           <SelectTrigger className="w-44">
             <SelectValue placeholder="All Sectors" />
           </SelectTrigger>
@@ -209,7 +226,7 @@ export default function AdminQuestions() {
             {sectors?.map((s: any) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterCategory} onValueChange={setFilterCategory}>
+        <Select value={filterCategory} onValueChange={handleFilterCategory}>
           <SelectTrigger className="w-52">
             <SelectValue placeholder="All Categories" />
           </SelectTrigger>
@@ -218,7 +235,7 @@ export default function AdminQuestions() {
             {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterGroup} onValueChange={setFilterGroup}>
+        <Select value={filterGroup} onValueChange={handleFilterGroup}>
           <SelectTrigger className="w-44">
             <SelectValue placeholder="All Groups" />
           </SelectTrigger>
@@ -228,7 +245,7 @@ export default function AdminQuestions() {
             {groups?.map((g: any) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Badge variant="secondary">{filteredQuestions?.length ?? 0} questions</Badge>
+        <Badge variant="secondary">{filteredQuestions.length} question{filteredQuestions.length !== 1 ? "s" : ""}</Badge>
       </div>
 
       {isLoading ? (
@@ -237,7 +254,7 @@ export default function AdminQuestions() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filteredQuestions?.length === 0 && (
+          {filteredQuestions.length === 0 && (
             <Card>
               <CardContent className="py-12 text-center">
                 <BookOpen className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
@@ -245,7 +262,7 @@ export default function AdminQuestions() {
               </CardContent>
             </Card>
           )}
-          {filteredQuestions?.map((q: any) => {
+          {paginatedQuestions.map((q: any) => {
             const groupName = groups?.find((g: any) => g.id === q.groupId)?.name;
             const catLabel = q.category === "custom" && q.customCategory
               ? q.customCategory
@@ -299,6 +316,88 @@ export default function AdminQuestions() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {!isLoading && filteredQuestions.length > 0 && (
+        <div className="flex items-center justify-between gap-4 pt-2 border-t">
+          {/* Page size selector + summary */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              Showing {Math.min((safePage - 1) * pageSize + 1, filteredQuestions.length)}–{Math.min(safePage * pageSize, filteredQuestions.length)} of {filteredQuestions.length}
+            </span>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+              <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 / page</SelectItem>
+                <SelectItem value="25">25 / page</SelectItem>
+                <SelectItem value="50">50 / page</SelectItem>
+                <SelectItem value="100">100 / page</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Page navigation */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline" size="sm" className="h-8 w-8 p-0"
+              onClick={() => setCurrentPage(1)}
+              disabled={safePage === 1}
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="outline" size="sm" className="h-8 w-8 p-0"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </Button>
+
+            {/* Page number pills */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                .reduce<(number | "...")[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && typeof arr[idx - 1] === "number" && (p as number) - (arr[idx - 1] as number) > 1) acc.push("...");
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, idx) =>
+                  p === "..." ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-xs text-muted-foreground">…</span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant={safePage === p ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 w-8 p-0 text-xs"
+                      onClick={() => setCurrentPage(p as number)}
+                    >
+                      {p}
+                    </Button>
+                  )
+                )}
+            </div>
+
+            <Button
+              variant="outline" size="sm" className="h-8 w-8 p-0"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="outline" size="sm" className="h-8 w-8 p-0"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safePage === totalPages}
+            >
+              <ChevronsRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       )}
 
