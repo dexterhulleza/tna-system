@@ -51,7 +51,8 @@ const ROLES = [
 export default function ProfileSetup() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const [selectedRole, setSelectedRole] = useState<string>(user?.tnaRole || "industry_worker");
+  const currentTnaRole = user?.tnaRole && user.tnaRole !== "admin" ? user.tnaRole : "industry_worker";
+  const [selectedRole, setSelectedRole] = useState<string>(currentTnaRole);
   const [organization, setOrganization] = useState(user?.organization || "");
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
 

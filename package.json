@@ -10,9 +10,8 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "postinstall": "chmod +x node_modules/.pnpm/@esbuild+linux-x64*/node_modules/@esbuild/linux-x64/bin/esbuild"
-}
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

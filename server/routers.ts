@@ -71,7 +71,7 @@ export const appRouter = router({
     updateProfile: protectedProcedure
       .input(
         z.object({
-          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer"]).optional(),
+          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin"]).optional(),
           organization: z.string().optional(),
           jobTitle: z.string().optional(),
         })
