@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { useRef } from "react";
 
 const CATEGORIES = [
   { value: "organizational", label: "Organizational-Level" },
@@ -79,6 +80,11 @@ export default function AdminQuestions() {
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [optionInput, setOptionInput] = useState("");
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [batchFile, setBatchFile] = useState<File | null>(null);
+  const [batchUploading, setBatchUploading] = useState(false);
+  const [batchResult, setBatchResult] = useState<{ total: number; inserted: number; errors: number; results: Array<{ rowNumber: number; status: string; questionText?: string; reason?: string }> } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: sectors } = trpc.sectors.list.useQuery({ activeOnly: false });
   const { data: groups } = trpc.groups.list.useQuery({ activeOnly: false });
@@ -152,6 +158,25 @@ export default function AdminQuestions() {
     ? questions?.filter((q: any) => !q.groupId)
     : questions?.filter((q: any) => String(q.groupId) === filterGroup);
 
+  const handleBatchUpload = async () => {
+    if (!batchFile) { toast.error("Please select a file"); return; }
+    setBatchUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", batchFile);
+      const res = await fetch("/api/questions/batch", { method: "POST", body: formData, credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setBatchResult(data);
+      if (data.inserted > 0) { refetch(); toast.success(`${data.inserted} question(s) imported successfully`); }
+      if (data.errors > 0) toast.warning(`${data.errors} row(s) had errors — check the results below`);
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally {
+      setBatchUploading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -159,10 +184,16 @@ export default function AdminQuestions() {
           <h1 className="font-display text-2xl font-bold text-foreground">Manage Questions</h1>
           <p className="text-muted-foreground text-sm mt-1">Customize survey questions per sector, skill area, and group</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 w-4 h-4" />
-          Add Question
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setBatchFile(null); setBatchResult(null); setShowBatchDialog(true); }}>
+            <Upload className="mr-2 w-4 h-4" />
+            Batch Upload
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 w-4 h-4" />
+            Add Question
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -421,6 +452,110 @@ export default function AdminQuestions() {
             <Button onClick={handleSave} disabled={upsert.isPending}>
               {upsert.isPending ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
               {form.id ? "Update Question" : "Create Question"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Upload Dialog */}
+      <Dialog open={showBatchDialog} onOpenChange={(open) => { setShowBatchDialog(open); if (!open) { setBatchFile(null); setBatchResult(null); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Upload className="w-5 h-5 text-primary" />
+              Batch Upload Questions
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Download template */}
+            <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+              <div className="flex items-start gap-3">
+                <Download className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">Step 1 — Download the Excel template</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    The template contains all required columns with instructions and an example row.
+                    Fill in your questions, then upload the file below.
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-2" asChild>
+                    <a href="/api/questions/batch/template" download="tna_questions_template.xlsx">
+                      <Download className="mr-2 w-3.5 h-3.5" />
+                      Download Template (.xlsx)
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* File picker */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Step 2 — Upload your completed file</p>
+              <div
+                className="rounded-lg border-2 border-dashed border-border hover:border-primary/50 transition-colors p-6 text-center cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                {batchFile ? (
+                  <p className="text-sm font-medium text-foreground">{batchFile.name}</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground">Click to select an Excel or CSV file</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">.xlsx, .xls, .csv — max 10 MB</p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => { setBatchFile(e.target.files?.[0] ?? null); setBatchResult(null); }}
+              />
+            </div>
+
+            {/* Results */}
+            {batchResult && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg bg-muted p-3 text-center">
+                    <p className="text-2xl font-bold text-foreground">{batchResult.total}</p>
+                    <p className="text-xs text-muted-foreground">Total Rows</p>
+                  </div>
+                  <div className="rounded-lg bg-green-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-green-700">{batchResult.inserted}</p>
+                    <p className="text-xs text-green-600">Imported</p>
+                  </div>
+                  <div className="rounded-lg bg-red-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-red-700">{batchResult.errors}</p>
+                    <p className="text-xs text-red-600">Errors</p>
+                  </div>
+                </div>
+                {batchResult.results.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto rounded-lg border divide-y text-xs">
+                    {batchResult.results.map((r) => (
+                      <div key={r.rowNumber} className={`flex items-start gap-2 px-3 py-2 ${
+                        r.status === "success" ? "bg-green-50/50" : "bg-red-50/50"
+                      }`}>
+                        {r.status === "success"
+                          ? <CheckCircle className="w-3.5 h-3.5 text-green-600 mt-0.5 flex-shrink-0" />
+                          : <XCircle className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-muted-foreground">Row {r.rowNumber}: </span>
+                          <span className="font-medium">{r.questionText ?? "—"}</span>
+                          {r.reason && <p className="text-red-600 mt-0.5">{r.reason}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowBatchDialog(false); setBatchFile(null); setBatchResult(null); }}>Close</Button>
+            <Button onClick={handleBatchUpload} disabled={!batchFile || batchUploading}>
+              {batchUploading ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : <Upload className="mr-2 w-4 h-4" />}
+              {batchUploading ? "Uploading..." : "Import Questions"}
             </Button>
           </DialogFooter>
         </DialogContent>

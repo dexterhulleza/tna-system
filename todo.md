@@ -66,3 +66,12 @@
 - [x] Custom category support in Manage Questions (admin can add named category per group)
 - [x] Admin reports: group filter and AI-generated analysis explanation per group
 - [x] AI narrative: methodology, theoretical basis, external study references
+
+## Batch Upload Feature (Mar 22 2026)
+- [x] Backend: batch question upload REST endpoint (POST /api/questions/batch) with Excel/CSV parsing
+- [x] Backend: validate uploaded rows against schema (category, questionType, sector, group)
+- [x] Frontend: Batch Upload dialog in Manage Questions with file picker
+- [x] Frontend: Download Excel template button with all required columns pre-filled
+- [x] Frontend: Upload preview table showing parsed rows before confirming import
+- [x] Frontend: Import result summary (success count, skipped rows, errors)
+- [x] Excel file: Comprehensive Film Animation TNA questions (all 5 categories + custom)

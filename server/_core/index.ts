@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerPDFRoutes } from "../pdfExport";
+import { registerBatchUploadRoutes } from "../batchUpload";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -38,6 +39,8 @@ async function startServer() {
   registerOAuthRoutes(app);
   // PDF export routes
   registerPDFRoutes(app);
+  // Batch upload routes
+  registerBatchUploadRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",
