@@ -81,3 +81,6 @@
 
 ## Pagination (Mar 22 2026)
 - [x] Paginate Manage Questions list (25 per page, page size selector, prev/next controls, count summary)
+
+## Search (Mar 22 2026)
+- [x] Keyword search bar in Manage Questions — live filter by question text, resets pagination

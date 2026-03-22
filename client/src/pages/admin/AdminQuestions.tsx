@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X } from "lucide-react";
 import { useRef, useMemo } from "react";
 
 const CATEGORIES = [
@@ -78,10 +78,13 @@ export default function AdminQuestions() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterGroup, setFilterGroup] = useState<string>("all");
 
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Reset to page 1 whenever any filter changes
   const handleFilterSector = (v: string) => { setFilterSector(v); setCurrentPage(1); };
   const handleFilterCategory = (v: string) => { setFilterCategory(v); setCurrentPage(1); };
   const handleFilterGroup = (v: string) => { setFilterGroup(v); setCurrentPage(1); };
+  const handleSearch = (v: string) => { setSearchQuery(v); setCurrentPage(1); };
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [optionInput, setOptionInput] = useState("");
@@ -159,15 +162,23 @@ export default function AdminQuestions() {
     setForm({ ...form, targetRoles: roles });
   };
 
-  // Client-side group filter (since backend getQuestions filters by group differently)
+  // Client-side filters: group + keyword search
   const filteredQuestions = useMemo(() => {
-    const base = filterGroup === "all"
+    let base = filterGroup === "all"
       ? questions
       : filterGroup === "none"
       ? questions?.filter((q: any) => !q.groupId)
       : questions?.filter((q: any) => String(q.groupId) === filterGroup);
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      base = base?.filter((item: any) =>
+        item.questionText?.toLowerCase().includes(q) ||
+        item.helpText?.toLowerCase().includes(q) ||
+        item.customCategory?.toLowerCase().includes(q)
+      );
+    }
     return base ?? [];
-  }, [questions, filterGroup]);
+  }, [questions, filterGroup, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -212,6 +223,26 @@ export default function AdminQuestions() {
             Add Question
           </Button>
         </div>
+      </div>
+
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <Input
+          placeholder="Search questions by text, help text, or custom category…"
+          value={searchQuery}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="pl-9 pr-9"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => handleSearch("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Clear search"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Filters */}
