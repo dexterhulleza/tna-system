@@ -1,0 +1,130 @@
+{
+  "query": "SELECT id, SUBSTRING(questionText, 1, 60) as question, category, groupId, isActive, createdAt FROM questions ORDER BY createdAt DESC LIMIT 15;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2oK6ea4WASNzAPa.692639685ca7 --database VVScSdX3cXq5qbpCSXZ7BV --execute SELECT id, SUBSTRING(questionText, 1, 60) as question, category, groupId, isActive, createdAt FROM questions ORDER BY createdAt DESC LIMIT 15;",
+  "rows": [
+    {
+      "id": "30078",
+      "question": "How would you rate your understanding of intellectual proper",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30075",
+      "question": "How would you rate your proficiency in using a digital drawi",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30072",
+      "question": "How would you rate your proficiency in Blender for 3D modeli",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30080",
+      "question": "How confident are you in communicating professionally with c",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30076",
+      "question": "How confident are you in using version control or asset mana",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30071",
+      "question": "How proficient are you in Adobe After Effects for motion gra",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30077",
+      "question": "How familiar are you with TESDA's National Competency Standa",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30079",
+      "question": "How proficient are you in preparing and delivering animation",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30082",
+      "question": "How would you rate your knowledge of safe work practices and",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30073",
+      "question": "How confident are you in using Autodesk Maya for character a",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30081",
+      "question": "How familiar are you with the WorldSkills International stan",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30074",
+      "question": "How proficient are you in using Toon Boom Harmony for 2D ani",
+      "category": "custom",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:51"
+    },
+    {
+      "id": "30006",
+      "question": "How would you rate the adequacy of animation workstations an",
+      "category": "organizational",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:50"
+    },
+    {
+      "id": "30007",
+      "question": "Does your organization have licensed access to industry-stan",
+      "category": "organizational",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:50"
+    },
+    {
+      "id": "30002",
+      "question": "How well does your organization's current training program a",
+      "category": "organizational",
+      "groupId": "1",
+      "isActive": "1",
+      "createdAt": "2026-03-22 08:28:50"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tquestion\tcategory\tgroupId\tisActive\tcreatedAt\n30078\tHow would you rate your understanding of intellectual proper\tcustom\t1\t1\t2026-03-22 08:28:51\n30075\tHow would you rate your proficiency in using a digital drawi\tcustom\t1\t1\t2026-03-22 08:28:51\n30072\tHow would you rate your proficiency in Blender for 3D modeli\tcustom\t1\t1\t2026-03-22 08:28:51\n30080\tHow confident are you in communicating professionally with c\tcustom\t1\t1\t2026-03-22 08:28:51\n30076\tHow confident are you in using version control or asset mana\tcustom\t1\t1\t2026-03-22 08:28:51\n30071\tHow proficient are you in Adobe After Effects for motion gra\tcustom\t1\t1\t2026-03-22 08:28:51\n30077\tHow familiar are you with TESDA's National Competency Standa\tcustom\t1\t1\t2026-03-22 08:28:51\n30079\tHow proficient are you in preparing and delivering animation\tcustom\t1\t1\t2026-03-22 08:28:51\n30082\tHow would you rate your knowledge of safe work practices and\tcustom\t1\t1\t2026-03-22 08:28:51\n30073\tHow confident are you in using Autodesk Maya for character a\tcustom\t1\t1\t2026-03-22 08:28:51\n30081\tHow familiar are you with the WorldSkills International stan\tcustom\t1\t1\t2026-03-22 08:28:51\n30074\tHow proficient are you in using Toon Boom Harmony for 2D ani\tcustom\t1\t1\t2026-03-22 08:28:51\n30006\tHow would you rate the adequacy of animation workstations an\torganizational\t1\t1\t2026-03-22 08:28:50\n30007\tDoes your organization have licensed access to industry-stan\torganizational\t1\t1\t2026-03-22 08:28:50\n30002\tHow well does your organization's current training program a\torganizational\t1\t1\t2026-03-22 08:28:50\n",
+  "stderr": "",
+  "execution_time_ms": 1564
+}

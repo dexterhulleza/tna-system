@@ -302,6 +302,7 @@ Write in a professional, academic tone suitable for a government or institutiona
           groupId: z.number().nullable().optional(),
           category: z.string().optional(),
           activeOnly: z.boolean().optional().default(true),
+          adminAll: z.boolean().optional().default(false),
         })
       )
       .query(({ input }) => getQuestions(input)),

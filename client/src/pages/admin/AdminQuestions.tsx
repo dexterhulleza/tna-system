@@ -96,6 +96,7 @@ export default function AdminQuestions() {
     sectorId: filterSector !== "all" ? parseInt(filterSector) : undefined,
     category: filterCategory !== "all" ? filterCategory : undefined,
     activeOnly: false,
+    adminAll: true, // Show ALL questions including group-tagged ones in admin view
   });
 
   const upsert = trpc.questions.upsert.useMutation({

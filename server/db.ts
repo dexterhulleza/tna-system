@@ -239,6 +239,7 @@ export async function getQuestions(filters: {
   groupId?: number | null;
   category?: string;
   activeOnly?: boolean;
+  adminAll?: boolean; // When true: bypass group restriction and show all questions
 }) {
   const db = await getDb();
   if (!db) return [];
@@ -265,13 +266,23 @@ export async function getQuestions(filters: {
     }
   }
 
-  // Group-specific questions: include global (null groupId) + group-specific
+  // Group-specific questions filter
+  // When groupId is explicitly provided: show questions for that group + global (null)
+  // When groupId is undefined (admin "All Groups" view): show ALL questions regardless of group
+  // When groupId is null ("No Group" filter): show only global questions (null groupId)
   if (filters.groupId !== undefined && filters.groupId !== null) {
-    conditions.push(or(eq(questions.groupId, filters.groupId), isNull(questions.groupId)));
-  } else {
-    // No group filter: only show questions without a group tag (global questions)
+    // Specific group selected: show group-specific + global questions
+    if (!filters.adminAll) {
+      conditions.push(or(eq(questions.groupId, filters.groupId), isNull(questions.groupId)));
+    } else {
+      // Admin filtering by a specific group: show only that group's questions
+      conditions.push(eq(questions.groupId, filters.groupId));
+    }
+  } else if (filters.groupId === null && !filters.adminAll) {
+    // Explicit null filter (survey context): only global questions
     conditions.push(isNull(questions.groupId));
   }
+  // If filters.adminAll is true and groupId is undefined: no group filter — show everything
 
   return db
     .select()

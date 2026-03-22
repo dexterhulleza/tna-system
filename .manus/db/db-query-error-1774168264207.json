@@ -1,0 +1,10 @@
+{
+  "query": "\nSELECT COUNT(*) as total_questions FROM questions;\nSELECT g.code, g.name, COUNT(q.id) as question_count \nFROM survey_groups g \nLEFT JOIN questions q ON q.group_id = g.id \nGROUP BY g.id, g.code, g.name;\nSELECT id, question_text, category, group_id, is_active, created_at \nFROM questions \nORDER BY created_at DESC \nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2oK6ea4WASNzAPa.692639685ca7 --database VVScSdX3cXq5qbpCSXZ7BV --execute \nSELECT COUNT(*) as total_questions FROM questions;\nSELECT g.code, g.name, COUNT(q.id) as question_count \nFROM survey_groups g \nLEFT JOIN questions q ON q.group_id = g.id \nGROUP BY g.id, g.code, g.name;\nSELECT id, question_text, category, group_id, is_active, created_at \nFROM questions \nORDER BY created_at DESC \nLIMIT 10;\n",
+  "returncode": 1,
+  "logs": [
+    "total_questions",
+    "112",
+    "ERROR 1054 (42S22) at line 3: Unknown column 'q.group_id' in 'on clause'"
+  ]
+}

@@ -75,3 +75,6 @@
 - [x] Frontend: Upload preview table showing parsed rows before confirming import
 - [x] Frontend: Import result summary (success count, skipped rows, errors)
 - [x] Excel file: Comprehensive Film Animation TNA questions (all 5 categories + custom)
+
+## Bug Fixes (Mar 22 2026)
+- [x] Fix: batch-uploaded questions not appearing in Manage Questions after successful import
