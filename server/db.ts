@@ -335,6 +335,20 @@ export async function deleteQuestion(id: number) {
   await db.update(questions).set({ isActive: false }).where(eq(questions.id, id));
 }
 
+export async function bulkDeactivateQuestions(ids: number[]) {
+  const db = await getDb();
+  if (!db || ids.length === 0) return 0;
+  await db.update(questions).set({ isActive: false }).where(inArray(questions.id, ids));
+  return ids.length;
+}
+
+export async function bulkDeleteQuestions(ids: number[]) {
+  const db = await getDb();
+  if (!db || ids.length === 0) return 0;
+  await db.delete(questions).where(inArray(questions.id, ids));
+  return ids.length;
+}
+
 // ─── Surveys ──────────────────────────────────────────────────────────────────
 export async function createSurvey(data: {
   userId: number;

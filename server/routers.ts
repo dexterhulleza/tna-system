@@ -6,6 +6,8 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import {
+  bulkDeactivateQuestions,
+  bulkDeleteQuestions,
   createReport,
   createSurvey,
   deleteQuestion,
@@ -334,6 +336,14 @@ Write in a professional, academic tone suitable for a government or institutiona
       .mutation(({ ctx, input }) => upsertQuestion({ ...input, createdBy: ctx.user.id })),
 
     delete: adminProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteQuestion(input.id)),
+
+    bulkDeactivate: adminProcedure
+      .input(z.object({ ids: z.array(z.number()).min(1) }))
+      .mutation(({ input }) => bulkDeactivateQuestions(input.ids)),
+
+    bulkDelete: adminProcedure
+      .input(z.object({ ids: z.array(z.number()).min(1) }))
+      .mutation(({ input }) => bulkDeleteQuestions(input.ids)),
   }),
 
   // ─── Surveys ───────────────────────────────────────────────────────────────

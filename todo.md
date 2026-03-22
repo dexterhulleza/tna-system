@@ -84,3 +84,8 @@
 
 ## Search (Mar 22 2026)
 - [x] Keyword search bar in Manage Questions — live filter by question text, resets pagination
+
+## Bulk Actions (Mar 22 2026)
+- [x] Backend: bulkDeactivate and bulkDelete tRPC procedures for questions
+- [x] Frontend: per-row checkboxes, Select All on Page, bulk action toolbar (deactivate / delete)
+- [x] Frontend: confirmation dialog before bulk delete

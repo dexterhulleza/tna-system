@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X } from "lucide-react";
-import { useRef, useMemo } from "react";
+import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Square, CheckSquare, MinusSquare, EyeOff, AlertTriangle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useRef, useMemo, useCallback } from "react";
 
 const CATEGORIES = [
   { value: "organizational", label: "Organizational-Level" },
@@ -90,6 +91,8 @@ export default function AdminQuestions() {
   const [optionInput, setOptionInput] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkConfirm, setShowBulkConfirm] = useState<"deactivate" | "delete" | null>(null);
   const [showBatchDialog, setShowBatchDialog] = useState(false);
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [batchUploading, setBatchUploading] = useState(false);
@@ -117,6 +120,32 @@ export default function AdminQuestions() {
     onSuccess: () => { toast.success("Question deleted"); refetch(); },
     onError: (e) => toast.error(e.message),
   });
+  const bulkDeactivate = trpc.questions.bulkDeactivate.useMutation({
+    onSuccess: (count) => {
+      toast.success(`${count} question(s) deactivated`);
+      setSelectedIds(new Set());
+      setShowBulkConfirm(null);
+      refetch();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const bulkDelete = trpc.questions.bulkDelete.useMutation({
+    onSuccess: (count) => {
+      toast.success(`${count} question(s) deleted`);
+      setSelectedIds(new Set());
+      setShowBulkConfirm(null);
+      refetch();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   const openCreate = () => { setForm({ ...emptyForm }); setOptionInput(""); setShowDialog(true); };
   const openEdit = (q: any) => {
@@ -186,6 +215,30 @@ export default function AdminQuestions() {
     const start = (safePage - 1) * pageSize;
     return filteredQuestions.slice(start, start + pageSize);
   }, [filteredQuestions, safePage, pageSize]);
+
+  const pageIds = useMemo(() => paginatedQuestions.map((q: any) => q.id as number), [paginatedQuestions]);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const somePageSelected = pageIds.some((id) => selectedIds.has(id)) && !allPageSelected;
+
+  const toggleSelectPage = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) { pageIds.forEach((id) => next.delete(id)); }
+      else { pageIds.forEach((id) => next.add(id)); }
+      return next;
+    });
+  }, [allPageSelected, pageIds]);
+
+  const handleBulkAction = (action: "deactivate" | "delete") => {
+    if (selectedIds.size === 0) return;
+    setShowBulkConfirm(action);
+  };
+
+  const confirmBulkAction = () => {
+    const ids = Array.from(selectedIds);
+    if (showBulkConfirm === "deactivate") bulkDeactivate.mutate({ ids });
+    else if (showBulkConfirm === "delete") bulkDelete.mutate({ ids });
+  };
 
   const handleBatchUpload = async () => {
     if (!batchFile) { toast.error("Please select a file"); return; }
@@ -279,12 +332,58 @@ export default function AdminQuestions() {
         <Badge variant="secondary">{filteredQuestions.length} question{filteredQuestions.length !== 1 ? "s" : ""}</Badge>
       </div>
 
+      {/* Bulk Action Toolbar — shown when any question is selected */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
+          <span className="text-sm font-medium text-primary">{selectedIds.size} selected</span>
+          <div className="flex-1" />
+          <Button
+            size="sm" variant="outline"
+            className="gap-1.5 text-amber-600 border-amber-300 hover:bg-amber-50"
+            onClick={() => handleBulkAction("deactivate")}
+            disabled={bulkDeactivate.isPending || bulkDelete.isPending}
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+            Deactivate
+          </Button>
+          <Button
+            size="sm" variant="outline"
+            className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/5"
+            onClick={() => handleBulkAction("delete")}
+            disabled={bulkDeactivate.isPending || bulkDelete.isPending}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </Button>
+          <Button
+            size="sm" variant="ghost" className="text-muted-foreground"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            <X className="w-3.5 h-3.5 mr-1" />Clear
+          </Button>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : (
         <div className="space-y-2">
+          {/* Select All on Page header row */}
+          {paginatedQuestions.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-1.5 text-xs text-muted-foreground">
+              <Checkbox
+                checked={allPageSelected}
+                onCheckedChange={toggleSelectPage}
+                aria-label="Select all on this page"
+                className={somePageSelected ? "data-[state=unchecked]:bg-primary/20" : ""}
+              />
+              <span>
+                {allPageSelected ? "Deselect all on page" : somePageSelected ? `${pageIds.filter(id => selectedIds.has(id)).length} of ${pageIds.length} selected on page` : "Select all on page"}
+              </span>
+            </div>
+          )}
           {filteredQuestions.length === 0 && (
             <Card>
               <CardContent className="py-12 text-center">
@@ -299,48 +398,57 @@ export default function AdminQuestions() {
               ? q.customCategory
               : CATEGORIES.find((c) => c.value === q.category)?.label;
             return (
-              <Card key={q.id} className={`border-l-4 ${!q.isActive ? "opacity-60" : ""}`}
+              <Card key={q.id}
+                className={`border-l-4 transition-colors ${!q.isActive ? "opacity-60" : ""} ${selectedIds.has(q.id) ? "bg-primary/5 border-primary/30" : ""}`}
                 style={{ borderLeftColor: CATEGORY_BORDER[q.category] || "#94a3b8" }}>
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <Badge className={`text-xs ${CATEGORY_COLORS[q.category] || "bg-teal-100 text-teal-700"}`}>
-                          {catLabel}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">{QUESTION_TYPES.find((t) => t.value === q.questionType)?.label}</Badge>
-                        {q.sectorId && sectors && (
-                          <Badge variant="secondary" className="text-xs">
-                            {sectors.find((s: any) => s.id === q.sectorId)?.name || `Sector ${q.sectorId}`}
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      checked={selectedIds.has(q.id)}
+                      onCheckedChange={() => toggleSelect(q.id)}
+                      aria-label={`Select question ${q.id}`}
+                      className="mt-0.5 flex-shrink-0"
+                    />
+                    <div className="flex flex-1 items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <Badge className={`text-xs ${CATEGORY_COLORS[q.category] || "bg-teal-100 text-teal-700"}`}>
+                            {catLabel}
                           </Badge>
-                        )}
-                        {!q.sectorId && <Badge variant="secondary" className="text-xs">All Sectors</Badge>}
-                        {groupName && (
-                          <Badge className="text-xs bg-teal-50 text-teal-700 border border-teal-200 gap-1">
-                            <Tag className="w-3 h-3" />
-                            {groupName}
-                          </Badge>
-                        )}
-                        {!q.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
-                      </div>
-                      <p className="text-sm text-foreground font-medium">{q.questionText}</p>
-                      {q.helpText && <p className="text-xs text-muted-foreground mt-1">{q.helpText}</p>}
-                      {q.options && q.options.length > 0 && (
-                        <div className="flex gap-1 flex-wrap mt-2">
-                          {q.options.map((o: string, i: number) => (
-                            <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded">{o}</span>
-                          ))}
+                          <Badge variant="outline" className="text-xs">{QUESTION_TYPES.find((t) => t.value === q.questionType)?.label}</Badge>
+                          {q.sectorId && sectors && (
+                            <Badge variant="secondary" className="text-xs">
+                              {sectors.find((s: any) => s.id === q.sectorId)?.name || `Sector ${q.sectorId}`}
+                            </Badge>
+                          )}
+                          {!q.sectorId && <Badge variant="secondary" className="text-xs">All Sectors</Badge>}
+                          {groupName && (
+                            <Badge className="text-xs bg-teal-50 text-teal-700 border border-teal-200 gap-1">
+                              <Tag className="w-3 h-3" />
+                              {groupName}
+                            </Badge>
+                          )}
+                          {!q.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(q)}>
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive"
-                        onClick={() => { if (confirm("Delete this question?")) del.mutate({ id: q.id }); }}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                        <p className="text-sm text-foreground font-medium">{q.questionText}</p>
+                        {q.helpText && <p className="text-xs text-muted-foreground mt-1">{q.helpText}</p>}
+                        {q.options && q.options.length > 0 && (
+                          <div className="flex gap-1 flex-wrap mt-2">
+                            {q.options.map((o: string, i: number) => (
+                              <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded">{o}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(q)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive"
+                          onClick={() => { if (confirm("Delete this question?")) del.mutate({ id: q.id }); }}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -687,6 +795,38 @@ export default function AdminQuestions() {
             <Button onClick={handleBatchUpload} disabled={!batchFile || batchUploading}>
               {batchUploading ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : <Upload className="mr-2 w-4 h-4" />}
               {batchUploading ? "Uploading..." : "Import Questions"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Confirmation Dialog */}
+      <Dialog open={!!showBulkConfirm} onOpenChange={(open) => { if (!open) setShowBulkConfirm(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className={`w-5 h-5 ${showBulkConfirm === "delete" ? "text-destructive" : "text-amber-500"}`} />
+              {showBulkConfirm === "delete" ? "Delete Questions" : "Deactivate Questions"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-3">
+            <p className="text-sm text-muted-foreground">
+              {showBulkConfirm === "delete"
+                ? `Are you sure you want to permanently delete ${selectedIds.size} question(s)? This action cannot be undone.`
+                : `Are you sure you want to deactivate ${selectedIds.size} question(s)? They will no longer appear in surveys.`
+              }
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkConfirm(null)}>Cancel</Button>
+            <Button
+              variant={showBulkConfirm === "delete" ? "destructive" : "default"}
+              className={showBulkConfirm === "deactivate" ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}
+              onClick={confirmBulkAction}
+              disabled={bulkDeactivate.isPending || bulkDelete.isPending}
+            >
+              {(bulkDeactivate.isPending || bulkDelete.isPending) && <Loader2 className="mr-2 w-4 h-4 animate-spin" />}
+              {showBulkConfirm === "delete" ? `Delete ${selectedIds.size}` : `Deactivate ${selectedIds.size}`}
             </Button>
           </DialogFooter>
         </DialogContent>
