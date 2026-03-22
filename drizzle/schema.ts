@@ -32,6 +32,25 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ─── Survey Groups ────────────────────────────────────────────────────────────
+// Admin-created group tags that can be assigned to surveys for cohort analysis
+export const surveyGroups = mysqlTable("survey_groups", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  description: text("description"),
+  // Optional sector scope (null = applies to all sectors)
+  sectorId: int("sectorId"),
+  isActive: boolean("isActive").default(true).notNull(),
+  sortOrder: int("sortOrder").default(0),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SurveyGroup = typeof surveyGroups.$inferSelect;
+export type InsertSurveyGroup = typeof surveyGroups.$inferInsert;
+
 // ─── Sectors (6 WorldSkills Primary Sectors) ──────────────────────────────────
 export const sectors = mysqlTable("sectors", {
   id: int("id").autoincrement().primaryKey(),
@@ -70,13 +89,18 @@ export const questions = mysqlTable("questions", {
   id: int("id").autoincrement().primaryKey(),
   sectorId: int("sectorId").references(() => sectors.id), // null = applies to all sectors
   skillAreaId: int("skillAreaId").references(() => skillAreas.id), // null = applies to all skill areas
+  // groupId: if set, this question is only shown to surveys tagged with this group
+  groupId: int("groupId"),
   category: mysqlEnum("category", [
     "organizational",
     "job_task",
     "individual",
     "training_feasibility",
     "evaluation_success",
+    "custom",
   ]).notNull(),
+  // customCategory: human-readable label for category="custom" questions
+  customCategory: varchar("customCategory", { length: 255 }),
   targetRoles: json("targetRoles").$type<string[]>().default(["industry_worker", "trainer", "assessor", "hr_officer"]),
   questionText: text("questionText").notNull(),
   questionType: mysqlEnum("questionType", [
@@ -109,8 +133,27 @@ export const surveys = mysqlTable("surveys", {
   userId: int("userId").notNull().references(() => users.id),
   sectorId: int("sectorId").notNull().references(() => sectors.id),
   skillAreaId: int("skillAreaId").references(() => skillAreas.id),
+  // Group tag assigned at survey start
+  groupId: int("groupId"),
   conductedWith: mysqlEnum("conductedWith", ["self", "hr_officer", "administrator"]).default("self"),
   conductedWithName: varchar("conductedWithName", { length: 255 }),
+  // Respondent basic information (captured before survey questions)
+  respondentName: varchar("respondentName", { length: 255 }),
+  respondentAge: int("respondentAge"),
+  respondentGender: mysqlEnum("respondentGender", ["male", "female", "non_binary", "prefer_not_to_say"]),
+  respondentPosition: varchar("respondentPosition", { length: 255 }),
+  respondentCompany: varchar("respondentCompany", { length: 255 }),
+  respondentYearsExperience: int("respondentYearsExperience"),
+  respondentHighestEducation: mysqlEnum("respondentHighestEducation", [
+    "elementary",
+    "high_school",
+    "vocational",
+    "associate",
+    "bachelor",
+    "master",
+    "doctorate",
+    "other",
+  ]),
   status: mysqlEnum("status", ["in_progress", "completed", "abandoned"]).default("in_progress").notNull(),
   currentCategory: varchar("currentCategory", { length: 100 }),
   completedAt: timestamp("completedAt"),

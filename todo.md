@@ -55,3 +55,14 @@
 ## Testing
 - [x] auth.logout unit test (20 tests total, all passing)
 - [x] TNA system tests: auth, sectors, questions, admin, surveys, reports
+
+## New Features (Mar 22 2026)
+- [x] groups table: admin-created group tags with name, description, sector scope
+- [x] surveys table: add respondentName, respondentAge, respondentGender, respondentPosition, respondentCompany, groupId fields
+- [x] questions table: support custom category name (for group-specific categories)
+- [x] Group CRUD API (admin)
+- [x] Survey respondent info capture form (before survey questions)
+- [x] Group tag selection on survey start
+- [x] Custom category support in Manage Questions (admin can add named category per group)
+- [x] Admin reports: group filter and AI-generated analysis explanation per group
+- [x] AI narrative: methodology, theoretical basis, external study references

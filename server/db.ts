@@ -8,6 +8,7 @@ import {
   reports,
   sectors,
   skillAreas,
+  surveyGroups,
   surveyResponses,
   surveys,
   users,
@@ -95,6 +96,52 @@ export async function updateUserProfile(
   const db = await getDb();
   if (!db) return;
   await db.update(users).set(data as any).where(eq(users.id, id));
+}
+
+// ─── Survey Groups ────────────────────────────────────────────────────────────
+export async function getAllSurveyGroups(activeOnly = true) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = activeOnly ? [eq(surveyGroups.isActive, true)] : [];
+  return db
+    .select()
+    .from(surveyGroups)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(surveyGroups.sortOrder, surveyGroups.name);
+}
+
+export async function getSurveyGroupById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(surveyGroups).where(eq(surveyGroups.id, id)).limit(1);
+  return result[0];
+}
+
+export async function upsertSurveyGroup(data: {
+  id?: number;
+  name: string;
+  code: string;
+  description?: string;
+  sectorId?: number | null;
+  isActive?: boolean;
+  sortOrder?: number;
+  createdBy?: number;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  if (data.id) {
+    await db.update(surveyGroups).set(data as any).where(eq(surveyGroups.id, data.id));
+    return data.id;
+  } else {
+    const result = await db.insert(surveyGroups).values(data as any);
+    return (result[0] as any).insertId as number;
+  }
+}
+
+export async function deleteSurveyGroup(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(surveyGroups).set({ isActive: false }).where(eq(surveyGroups.id, id));
 }
 
 // ─── Sectors ──────────────────────────────────────────────────────────────────
@@ -189,6 +236,7 @@ export async function deleteSkillArea(id: number) {
 export async function getQuestions(filters: {
   sectorId?: number | null;
   skillAreaId?: number | null;
+  groupId?: number | null;
   category?: string;
   activeOnly?: boolean;
 }) {
@@ -217,6 +265,14 @@ export async function getQuestions(filters: {
     }
   }
 
+  // Group-specific questions: include global (null groupId) + group-specific
+  if (filters.groupId !== undefined && filters.groupId !== null) {
+    conditions.push(or(eq(questions.groupId, filters.groupId), isNull(questions.groupId)));
+  } else {
+    // No group filter: only show questions without a group tag (global questions)
+    conditions.push(isNull(questions.groupId));
+  }
+
   return db
     .select()
     .from(questions)
@@ -235,7 +291,9 @@ export async function upsertQuestion(data: {
   id?: number;
   sectorId?: number | null;
   skillAreaId?: number | null;
+  groupId?: number | null;
   category: string;
+  customCategory?: string;
   targetRoles?: string[];
   questionText: string;
   questionType: string;
@@ -271,13 +329,38 @@ export async function createSurvey(data: {
   userId: number;
   sectorId: number;
   skillAreaId?: number | null;
+  groupId?: number | null;
   conductedWith?: string;
   conductedWithName?: string;
+  respondentName?: string;
+  respondentAge?: number;
+  respondentGender?: string;
+  respondentPosition?: string;
+  respondentCompany?: string;
+  respondentYearsExperience?: number;
+  respondentHighestEducation?: string;
 }) {
   const db = await getDb();
   if (!db) return null;
   const result = await db.insert(surveys).values({ ...data, status: "in_progress" } as any);
   return (result[0] as any).insertId as number;
+}
+
+export async function updateSurveyRespondentInfo(
+  id: number,
+  data: {
+    respondentName?: string;
+    respondentAge?: number;
+    respondentGender?: string;
+    respondentPosition?: string;
+    respondentCompany?: string;
+    respondentYearsExperience?: number;
+    respondentHighestEducation?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(surveys).set(data as any).where(eq(surveys.id, id));
 }
 
 export async function getSurveyById(id: number) {
@@ -295,10 +378,12 @@ export async function getUserSurveys(userId: number) {
       survey: surveys,
       sector: sectors,
       skillArea: skillAreas,
+      group: surveyGroups,
     })
     .from(surveys)
     .leftJoin(sectors, eq(surveys.sectorId, sectors.id))
     .leftJoin(skillAreas, eq(surveys.skillAreaId, skillAreas.id))
+    .leftJoin(surveyGroups, eq(surveys.groupId, surveyGroups.id))
     .where(eq(surveys.userId, userId))
     .orderBy(desc(surveys.createdAt));
 }
@@ -311,10 +396,12 @@ export async function getAllSurveys() {
       survey: surveys,
       user: users,
       sector: sectors,
+      group: surveyGroups,
     })
     .from(surveys)
     .leftJoin(users, eq(surveys.userId, users.id))
     .leftJoin(sectors, eq(surveys.sectorId, sectors.id))
+    .leftJoin(surveyGroups, eq(surveys.groupId, surveyGroups.id))
     .orderBy(desc(surveys.createdAt));
 }
 
@@ -344,7 +431,6 @@ export async function saveSurveyResponses(
   if (!db) return;
 
   for (const resp of responses) {
-    // Check if response already exists
     const existing = await db
       .select()
       .from(surveyResponses)
@@ -467,10 +553,32 @@ export async function getAllReports() {
       report: reports,
       user: users,
       sector: sectors,
+      survey: surveys,
+      group: surveyGroups,
     })
     .from(reports)
     .leftJoin(users, eq(reports.userId, users.id))
     .leftJoin(sectors, eq(reports.sectorId, sectors.id))
+    .leftJoin(surveys, eq(reports.surveyId, surveys.id))
+    .leftJoin(surveyGroups, eq(surveys.groupId, surveyGroups.id))
+    .orderBy(desc(reports.createdAt));
+}
+
+export async function getReportsByGroup(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      report: reports,
+      user: users,
+      sector: sectors,
+      survey: surveys,
+    })
+    .from(reports)
+    .leftJoin(users, eq(reports.userId, users.id))
+    .leftJoin(sectors, eq(reports.sectorId, sectors.id))
+    .leftJoin(surveys, eq(reports.surveyId, surveys.id))
+    .where(eq(surveys.groupId, groupId))
     .orderBy(desc(reports.createdAt));
 }
 
@@ -490,7 +598,6 @@ export async function saveRecommendations(
 ) {
   const db = await getDb();
   if (!db) return;
-  // Delete old recommendations
   await db.delete(recommendations).where(eq(recommendations.reportId, reportId));
   if (recs.length === 0) return;
   await db.insert(recommendations).values(recs.map((r, i) => ({ ...r, reportId, sortOrder: i } as any)));
@@ -538,7 +645,7 @@ export async function upsertAdminPermissions(
 // ─── Stats ────────────────────────────────────────────────────────────────────
 export async function getDashboardStats() {
   const db = await getDb();
-  if (!db) return { totalUsers: 0, totalSurveys: 0, completedSurveys: 0, totalReports: 0 };
+  if (!db) return { totalUsers: 0, totalSurveys: 0, completedSurveys: 0, totalReports: 0, totalGroups: 0 };
 
   const [userCount] = await db.select({ count: sql<number>`count(*)` }).from(users);
   const [surveyCount] = await db.select({ count: sql<number>`count(*)` }).from(surveys);
@@ -547,11 +654,13 @@ export async function getDashboardStats() {
     .from(surveys)
     .where(eq(surveys.status, "completed"));
   const [reportCount] = await db.select({ count: sql<number>`count(*)` }).from(reports);
+  const [groupCount] = await db.select({ count: sql<number>`count(*)` }).from(surveyGroups).where(eq(surveyGroups.isActive, true));
 
   return {
     totalUsers: Number(userCount?.count ?? 0),
     totalSurveys: Number(surveyCount?.count ?? 0),
     completedSurveys: Number(completedCount?.count ?? 0),
     totalReports: Number(reportCount?.count ?? 0),
+    totalGroups: Number(groupCount?.count ?? 0),
   };
 }

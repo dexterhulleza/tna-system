@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag } from "lucide-react";
 
 const CATEGORIES = [
   { value: "organizational", label: "Organizational-Level" },
@@ -18,6 +18,7 @@ const CATEGORIES = [
   { value: "individual", label: "Individual-Level" },
   { value: "training_feasibility", label: "Training Feasibility" },
   { value: "evaluation_success", label: "Evaluation & Success Criteria" },
+  { value: "custom", label: "Custom (Group-Specific)" },
 ];
 
 const QUESTION_TYPES = [
@@ -41,13 +42,25 @@ const CATEGORY_COLORS: Record<string, string> = {
   individual: "bg-green-100 text-green-700",
   training_feasibility: "bg-orange-100 text-orange-700",
   evaluation_success: "bg-red-100 text-red-700",
+  custom: "bg-teal-100 text-teal-700",
+};
+
+const CATEGORY_BORDER: Record<string, string> = {
+  organizational: "#3b82f6",
+  job_task: "#8b5cf6",
+  individual: "#22c55e",
+  training_feasibility: "#f97316",
+  evaluation_success: "#ef4444",
+  custom: "#14b8a6",
 };
 
 const emptyForm = {
   id: undefined as number | undefined,
   sectorId: null as number | null,
   skillAreaId: null as number | null,
+  groupId: null as number | null,
   category: "organizational" as string,
+  customCategory: "",
   questionText: "",
   questionType: "text" as string,
   options: [] as string[],
@@ -62,11 +75,13 @@ const emptyForm = {
 export default function AdminQuestions() {
   const [filterSector, setFilterSector] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterGroup, setFilterGroup] = useState<string>("all");
   const [showDialog, setShowDialog] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [optionInput, setOptionInput] = useState("");
 
   const { data: sectors } = trpc.sectors.list.useQuery({ activeOnly: false });
+  const { data: groups } = trpc.groups.list.useQuery({ activeOnly: false });
   const { data: skillAreas } = trpc.skillAreas.listBySector.useQuery(
     { sectorId: form.sectorId!, activeOnly: false },
     { enabled: !!form.sectorId }
@@ -90,7 +105,9 @@ export default function AdminQuestions() {
   const openEdit = (q: any) => {
     setForm({
       id: q.id, sectorId: q.sectorId, skillAreaId: q.skillAreaId,
-      category: q.category, questionText: q.questionText,
+      groupId: q.groupId ?? null,
+      category: q.category, customCategory: q.customCategory || "",
+      questionText: q.questionText,
       questionType: q.questionType, options: q.options || [],
       targetRoles: q.targetRoles || [], isRequired: q.isRequired ?? true,
       isActive: q.isActive ?? true, helpText: q.helpText || "",
@@ -101,11 +118,16 @@ export default function AdminQuestions() {
 
   const handleSave = () => {
     if (!form.questionText.trim()) { toast.error("Question text is required"); return; }
+    if (form.category === "custom" && !form.customCategory.trim()) {
+      toast.error("Please enter a custom category name"); return;
+    }
     upsert.mutate({
       ...form,
       category: form.category as any,
+      customCategory: form.category === "custom" ? form.customCategory.trim() : undefined,
       questionType: form.questionType as any,
       options: form.options.length > 0 ? form.options : null,
+      groupId: form.groupId ?? null,
     });
   };
 
@@ -123,12 +145,19 @@ export default function AdminQuestions() {
     setForm({ ...form, targetRoles: roles });
   };
 
+  // Client-side group filter (since backend getQuestions filters by group differently)
+  const filteredQuestions = filterGroup === "all"
+    ? questions
+    : filterGroup === "none"
+    ? questions?.filter((q: any) => !q.groupId)
+    : questions?.filter((q: any) => String(q.groupId) === filterGroup);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Manage Questions</h1>
-          <p className="text-muted-foreground text-sm mt-1">Customize survey questions per sector and skill area</p>
+          <p className="text-muted-foreground text-sm mt-1">Customize survey questions per sector, skill area, and group</p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="mr-2 w-4 h-4" />
@@ -140,7 +169,7 @@ export default function AdminQuestions() {
       <div className="flex items-center gap-3 flex-wrap">
         <Filter className="w-4 h-4 text-muted-foreground" />
         <Select value={filterSector} onValueChange={setFilterSector}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-44">
             <SelectValue placeholder="All Sectors" />
           </SelectTrigger>
           <SelectContent>
@@ -149,7 +178,7 @@ export default function AdminQuestions() {
           </SelectContent>
         </Select>
         <Select value={filterCategory} onValueChange={setFilterCategory}>
-          <SelectTrigger className="w-56">
+          <SelectTrigger className="w-52">
             <SelectValue placeholder="All Categories" />
           </SelectTrigger>
           <SelectContent>
@@ -157,7 +186,17 @@ export default function AdminQuestions() {
             {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Badge variant="secondary">{questions?.length ?? 0} questions</Badge>
+        <Select value={filterGroup} onValueChange={setFilterGroup}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All Groups" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Groups</SelectItem>
+            <SelectItem value="none">No Group (Global)</SelectItem>
+            {groups?.map((g: any) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Badge variant="secondary">{filteredQuestions?.length ?? 0} questions</Badge>
       </div>
 
       {isLoading ? (
@@ -166,7 +205,7 @@ export default function AdminQuestions() {
         </div>
       ) : (
         <div className="space-y-2">
-          {questions?.length === 0 && (
+          {filteredQuestions?.length === 0 && (
             <Card>
               <CardContent className="py-12 text-center">
                 <BookOpen className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
@@ -174,48 +213,60 @@ export default function AdminQuestions() {
               </CardContent>
             </Card>
           )}
-          {questions?.map((q: any) => (
-            <Card key={q.id} className={`border-l-4 ${!q.isActive ? "opacity-60" : ""}`}
-              style={{ borderLeftColor: q.category === "organizational" ? "#3b82f6" : q.category === "job_task" ? "#8b5cf6" : q.category === "individual" ? "#22c55e" : q.category === "training_feasibility" ? "#f97316" : "#ef4444" }}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <Badge className={`text-xs ${CATEGORY_COLORS[q.category]}`}>
-                        {CATEGORIES.find((c) => c.value === q.category)?.label}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">{QUESTION_TYPES.find((t) => t.value === q.questionType)?.label}</Badge>
-                      {q.sectorId && sectors && (
-                        <Badge variant="secondary" className="text-xs">
-                          {sectors.find((s: any) => s.id === q.sectorId)?.name || `Sector ${q.sectorId}`}
+          {filteredQuestions?.map((q: any) => {
+            const groupName = groups?.find((g: any) => g.id === q.groupId)?.name;
+            const catLabel = q.category === "custom" && q.customCategory
+              ? q.customCategory
+              : CATEGORIES.find((c) => c.value === q.category)?.label;
+            return (
+              <Card key={q.id} className={`border-l-4 ${!q.isActive ? "opacity-60" : ""}`}
+                style={{ borderLeftColor: CATEGORY_BORDER[q.category] || "#94a3b8" }}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <Badge className={`text-xs ${CATEGORY_COLORS[q.category] || "bg-teal-100 text-teal-700"}`}>
+                          {catLabel}
                         </Badge>
-                      )}
-                      {!q.sectorId && <Badge variant="secondary" className="text-xs">All Sectors</Badge>}
-                      {!q.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
-                    </div>
-                    <p className="text-sm text-foreground font-medium">{q.questionText}</p>
-                    {q.helpText && <p className="text-xs text-muted-foreground mt-1">{q.helpText}</p>}
-                    {q.options && q.options.length > 0 && (
-                      <div className="flex gap-1 flex-wrap mt-2">
-                        {q.options.map((o: string, i: number) => (
-                          <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded">{o}</span>
-                        ))}
+                        <Badge variant="outline" className="text-xs">{QUESTION_TYPES.find((t) => t.value === q.questionType)?.label}</Badge>
+                        {q.sectorId && sectors && (
+                          <Badge variant="secondary" className="text-xs">
+                            {sectors.find((s: any) => s.id === q.sectorId)?.name || `Sector ${q.sectorId}`}
+                          </Badge>
+                        )}
+                        {!q.sectorId && <Badge variant="secondary" className="text-xs">All Sectors</Badge>}
+                        {groupName && (
+                          <Badge className="text-xs bg-teal-50 text-teal-700 border border-teal-200 gap-1">
+                            <Tag className="w-3 h-3" />
+                            {groupName}
+                          </Badge>
+                        )}
+                        {!q.isActive && <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
                       </div>
-                    )}
+                      <p className="text-sm text-foreground font-medium">{q.questionText}</p>
+                      {q.helpText && <p className="text-xs text-muted-foreground mt-1">{q.helpText}</p>}
+                      {q.options && q.options.length > 0 && (
+                        <div className="flex gap-1 flex-wrap mt-2">
+                          {q.options.map((o: string, i: number) => (
+                            <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded">{o}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(q)}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive"
+                        onClick={() => { if (confirm("Delete this question?")) del.mutate({ id: q.id }); }}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(q)}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive"
-                      onClick={() => { if (confirm("Delete this question?")) del.mutate({ id: q.id }); }}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -226,6 +277,7 @@ export default function AdminQuestions() {
             <DialogTitle className="font-display">{form.id ? "Edit Question" : "Create New Question"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Scope: Sector + Skill Area */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Sector (optional)</Label>
@@ -251,6 +303,33 @@ export default function AdminQuestions() {
                 </Select>
               </div>
             </div>
+
+            {/* Group Tag */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-primary" />
+                Group Tag (optional)
+              </Label>
+              <Select
+                value={form.groupId ? String(form.groupId) : "none"}
+                onValueChange={(v) => setForm({ ...form, groupId: v === "none" ? null : parseInt(v) })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Group (shown to all respondents)</SelectItem>
+                  {groups?.map((g: any) => (
+                    <SelectItem key={g.id} value={String(g.id)}>
+                      {g.name} ({g.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Assign to a group to show this question only to respondents in that group.
+              </p>
+            </div>
+
+            {/* Category + Custom Category */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Category *</Label>
@@ -271,6 +350,22 @@ export default function AdminQuestions() {
                 </Select>
               </div>
             </div>
+
+            {/* Custom Category Name */}
+            {form.category === "custom" && (
+              <div className="space-y-1.5">
+                <Label>Custom Category Name *</Label>
+                <Input
+                  value={form.customCategory}
+                  onChange={(e) => setForm({ ...form, customCategory: e.target.value })}
+                  placeholder="e.g., Safety Compliance, Digital Literacy, Soft Skills..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  This label will appear as a distinct category section in the survey and report.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label>Question Text *</Label>
               <Textarea value={form.questionText} onChange={(e) => setForm({ ...form, questionText: e.target.value })}

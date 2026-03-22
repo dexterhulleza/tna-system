@@ -10,7 +10,7 @@ import { useLocation } from "wouter";
 import { useState } from "react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
-import { ArrowLeft, BookOpen, ChevronRight, Info } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Info, User, Tag } from "lucide-react";
 import { SECTOR_ICONS, SECTOR_COLORS } from "@/types/tna";
 
 const SECTOR_BG: Record<string, string> = {
@@ -22,14 +22,34 @@ const SECTOR_BG: Record<string, string> = {
   TL: "from-red-500 to-rose-600",
 };
 
+const STEPS = ["sector", "skill_area", "respondent", "options"] as const;
+type Step = typeof STEPS[number];
+
+const STEP_LABELS: Record<Step, string> = {
+  sector: "Select Sector",
+  skill_area: "Skill Area",
+  respondent: "Your Info",
+  options: "Options",
+};
+
 export default function SurveyStart() {
   const { user, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
-  const [step, setStep] = useState<"sector" | "skill_area" | "options">("sector");
+  const [step, setStep] = useState<Step>("sector");
   const [selectedSectorId, setSelectedSectorId] = useState<number | null>(null);
   const [selectedSkillAreaId, setSelectedSkillAreaId] = useState<number | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [conductedWith, setConductedWith] = useState<"self" | "hr_officer" | "administrator">("self");
   const [conductedWithName, setConductedWithName] = useState("");
+
+  // Respondent info state
+  const [respondentName, setRespondentName] = useState(user?.name || "");
+  const [respondentAge, setRespondentAge] = useState("");
+  const [respondentGender, setRespondentGender] = useState("");
+  const [respondentPosition, setRespondentPosition] = useState(user?.jobTitle || "");
+  const [respondentCompany, setRespondentCompany] = useState(user?.organization || "");
+  const [respondentYearsExperience, setRespondentYearsExperience] = useState("");
+  const [respondentHighestEducation, setRespondentHighestEducation] = useState("");
 
   if (!isAuthenticated) {
     window.location.href = getLoginUrl("/survey/start");
@@ -41,6 +61,7 @@ export default function SurveyStart() {
     { sectorId: selectedSectorId!, activeOnly: true },
     { enabled: !!selectedSectorId }
   );
+  const { data: groups } = trpc.groups.list.useQuery({ activeOnly: true });
 
   const startSurvey = trpc.surveys.start.useMutation({
     onSuccess: ({ surveyId }) => {
@@ -52,6 +73,7 @@ export default function SurveyStart() {
   });
 
   const selectedSector = sectors?.find((s) => s.id === selectedSectorId);
+  const stepIndex = STEPS.indexOf(step);
 
   const handleSectorSelect = (sectorId: number) => {
     setSelectedSectorId(sectorId);
@@ -59,17 +81,24 @@ export default function SurveyStart() {
     setStep("skill_area");
   };
 
-  const handleSkillAreaContinue = () => {
-    setStep("options");
-  };
+  const handleSkillAreaContinue = () => setStep("respondent");
+  const handleRespondentContinue = () => setStep("options");
 
   const handleStartSurvey = () => {
     if (!selectedSectorId) return;
     startSurvey.mutate({
       sectorId: selectedSectorId,
       skillAreaId: selectedSkillAreaId ?? undefined,
+      groupId: selectedGroupId ?? undefined,
       conductedWith,
       conductedWithName: conductedWithName || undefined,
+      respondentName: respondentName || undefined,
+      respondentAge: respondentAge ? parseInt(respondentAge) : undefined,
+      respondentGender: respondentGender as any || undefined,
+      respondentPosition: respondentPosition || undefined,
+      respondentCompany: respondentCompany || undefined,
+      respondentYearsExperience: respondentYearsExperience ? parseInt(respondentYearsExperience) : undefined,
+      respondentHighestEducation: respondentHighestEducation as any || undefined,
     });
   };
 
@@ -91,7 +120,7 @@ export default function SurveyStart() {
             <span className="hidden sm:block">{user?.name}</span>
             {user?.tnaRole && (
               <Badge variant="secondary" className="capitalize">
-                {user.tnaRole.replace("_", " ")}
+                {user.tnaRole.replace(/_/g, " ")}
               </Badge>
             )}
           </div>
@@ -100,14 +129,14 @@ export default function SurveyStart() {
 
       <div className="container py-8 max-w-4xl">
         {/* Step Indicator */}
-        <div className="flex items-center gap-2 mb-8">
-          {["sector", "skill_area", "options"].map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-1">
+          {STEPS.map((s, i) => (
+            <div key={s} className="flex items-center gap-2 shrink-0">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${
                   step === s
                     ? "bg-primary text-white"
-                    : ["sector", "skill_area", "options"].indexOf(step) > i
+                    : stepIndex > i
                     ? "bg-green-500 text-white"
                     : "bg-muted text-muted-foreground"
                 }`}
@@ -115,9 +144,9 @@ export default function SurveyStart() {
                 {i + 1}
               </div>
               <span className={`text-sm hidden sm:block ${step === s ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-                {s === "sector" ? "Select Sector" : s === "skill_area" ? "Skill Area" : "Options"}
+                {STEP_LABELS[s]}
               </span>
-              {i < 2 && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+              {i < STEPS.length - 1 && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
             </div>
           ))}
         </div>
@@ -203,11 +232,7 @@ export default function SurveyStart() {
               <div className="space-y-3">
                 <button
                   onClick={() => { setSelectedSkillAreaId(null); handleSkillAreaContinue(); }}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                    selectedSkillAreaId === null
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
+                  className="w-full text-left p-4 rounded-xl border-2 border-border hover:border-primary/50 transition-all"
                 >
                   <div className="font-semibold text-foreground text-sm">General Sector Survey</div>
                   <div className="text-xs text-muted-foreground mt-1">
@@ -238,12 +263,158 @@ export default function SurveyStart() {
           </div>
         )}
 
-        {/* Step 3: Options */}
-        {step === "options" && (
+        {/* Step 3: Respondent Information */}
+        {step === "respondent" && (
           <div>
             <div className="mb-6">
               <button
                 onClick={() => setStep("skill_area")}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </button>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+                  <User className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="font-display text-2xl font-bold text-foreground">Respondent Information</h1>
+                  <p className="text-sm text-muted-foreground">Basic details to personalize and contextualize your TNA report.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 max-w-2xl">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="font-display text-base">Personal Details</CardTitle>
+                  <CardDescription>Fields marked with * are recommended for accurate analysis.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="rName">Full Name *</Label>
+                      <Input
+                        id="rName"
+                        placeholder="e.g., Juan dela Cruz"
+                        value={respondentName}
+                        onChange={(e) => setRespondentName(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="rAge">Age</Label>
+                      <Input
+                        id="rAge"
+                        type="number"
+                        placeholder="e.g., 35"
+                        min={16}
+                        max={80}
+                        value={respondentAge}
+                        onChange={(e) => setRespondentAge(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="rGender">Gender</Label>
+                      <Select value={respondentGender} onValueChange={setRespondentGender}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                          <SelectItem value="non_binary">Non-binary</SelectItem>
+                          <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="rEdu">Highest Educational Attainment</Label>
+                      <Select value={respondentHighestEducation} onValueChange={setRespondentHighestEducation}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select education level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="elementary">Elementary</SelectItem>
+                          <SelectItem value="high_school">High School</SelectItem>
+                          <SelectItem value="vocational">Vocational / TVET</SelectItem>
+                          <SelectItem value="associate">Associate Degree</SelectItem>
+                          <SelectItem value="bachelor">Bachelor's Degree</SelectItem>
+                          <SelectItem value="master">Master's Degree</SelectItem>
+                          <SelectItem value="doctorate">Doctorate</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="font-display text-base">Professional Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="rPosition">Position / Job Title *</Label>
+                      <Input
+                        id="rPosition"
+                        placeholder="e.g., Senior Trainer"
+                        value={respondentPosition}
+                        onChange={(e) => setRespondentPosition(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="rCompany">Organization / Company *</Label>
+                      <Input
+                        id="rCompany"
+                        placeholder="e.g., WorldSkills Philippines"
+                        value={respondentCompany}
+                        onChange={(e) => setRespondentCompany(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="rYears">Years of Experience in Current Field</Label>
+                    <Input
+                      id="rYears"
+                      type="number"
+                      placeholder="e.g., 5"
+                      min={0}
+                      max={50}
+                      value={respondentYearsExperience}
+                      onChange={(e) => setRespondentYearsExperience(e.target.value)}
+                      className="mt-1 max-w-xs"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={handleRespondentContinue}
+              >
+                Continue to Survey Options
+                <ChevronRight className="ml-2 w-5 h-5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Options */}
+        {step === "options" && (
+          <div>
+            <div className="mb-6">
+              <button
+                onClick={() => setStep("respondent")}
                 className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3"
               >
                 <ArrowLeft className="w-4 h-4" /> Back
@@ -253,6 +424,56 @@ export default function SurveyStart() {
             </div>
 
             <div className="space-y-4 max-w-lg">
+              {/* Group Tag */}
+              {groups && groups.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="font-display text-base flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-primary" />
+                      Group Tag
+                    </CardTitle>
+                    <CardDescription>
+                      Assign this survey to a group for cohort-level analysis. Select the group you belong to, if applicable.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => setSelectedGroupId(null)}
+                        className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                          selectedGroupId === null
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <div className="font-semibold text-sm text-foreground">No Group</div>
+                        <div className="text-xs text-muted-foreground">Individual assessment, not assigned to any group</div>
+                      </button>
+                      {groups.map((group) => (
+                        <button
+                          key={group.id}
+                          onClick={() => setSelectedGroupId(group.id)}
+                          className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                            selectedGroupId === group.id
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Tag className="w-3.5 h-3.5 text-primary" />
+                            <div className="font-semibold text-sm text-foreground">{group.name}</div>
+                            <Badge variant="outline" className="text-xs">{group.code}</Badge>
+                          </div>
+                          {group.description && (
+                            <div className="text-xs text-muted-foreground mt-1 ml-5">{group.description}</div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="font-display text-base">Conducted With</CardTitle>
@@ -299,10 +520,19 @@ export default function SurveyStart() {
                 </Card>
               )}
 
+              {/* Survey Summary */}
               <Card className="bg-muted/30">
                 <CardContent className="pt-4">
                   <div className="text-sm font-semibold text-foreground mb-2">Survey Summary</div>
                   <div className="space-y-1 text-sm text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Respondent:</span>
+                      <span className="font-medium text-foreground">{respondentName || user?.name || "—"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Organization:</span>
+                      <span className="font-medium text-foreground">{respondentCompany || user?.organization || "—"}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span>Sector:</span>
                       <span className="font-medium text-foreground">{selectedSector?.name}</span>
@@ -313,15 +543,19 @@ export default function SurveyStart() {
                         {skillAreas?.find((a) => a.id === selectedSkillAreaId)?.name || "General"}
                       </span>
                     </div>
+                    {selectedGroupId && (
+                      <div className="flex justify-between">
+                        <span>Group:</span>
+                        <span className="font-medium text-foreground">
+                          {groups?.find((g) => g.id === selectedGroupId)?.name}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span>Your Role:</span>
                       <span className="font-medium text-foreground capitalize">
-                        {user?.tnaRole?.replace("_", " ") || "Not set"}
+                        {user?.tnaRole?.replace(/_/g, " ") || "Not set"}
                       </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Categories:</span>
-                      <span className="font-medium text-foreground">5 categories</span>
                     </div>
                   </div>
                 </CardContent>
