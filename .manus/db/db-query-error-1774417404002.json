@@ -1,0 +1,8 @@
+{
+  "query": "DESCRIBE survey_configurations;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2oK6ea4WASNzAPa.692639685ca7 --database VVScSdX3cXq5qbpCSXZ7BV --execute DESCRIBE survey_configurations;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1146 (42S02) at line 1: Table 'vvscsdx3cxq5qbpcsxz7bv.survey_configurations' doesn't exist"
+  ]
+}
