@@ -130,9 +130,13 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
               </div>
             </div>
           ) : error ? (
-            <div className="flex items-center gap-2 text-sm text-destructive py-4 px-3 bg-destructive/5 rounded-lg">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>Failed to load analysis. Please try again.</span>
+            <div className="py-4 px-4 bg-destructive/5 rounded-lg border border-destructive/20 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Failed to load analysis</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{error.message || "An unexpected error occurred."}</p>
+              <p className="text-xs text-muted-foreground">If you are using Gemini, your API quota may be exhausted. Go to <strong>Admin → AI Settings</strong> to check your configuration or switch to a different provider. Then click <strong>Regenerate</strong> to retry.</p>
             </div>
           ) : !data ? null : data.reports.length === 0 ? (
             <div className="py-8 text-center">
@@ -323,9 +327,17 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
                   </div>
                 </div>
               ) : (
-                <div className="border rounded-xl p-4 bg-muted/30 text-center">
-                  <AlertTriangle className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">AI analysis could not be generated at this time.</p>
+                <div className="border rounded-xl p-5 bg-amber-500/5 border border-amber-500/20 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                    <p className="text-sm font-medium text-foreground">AI analysis could not be generated</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">The AI provider encountered an error while generating the analysis. This may be due to API quota limits, a temporary service outage, or a configuration issue.</p>
+                  <p className="text-xs text-muted-foreground">Go to <strong>Admin → AI Settings</strong> to verify your AI provider configuration, or click <strong>Regenerate</strong> to try again.</p>
+                  <Button variant="outline" size="sm" className="gap-1.5 mt-1" onClick={handleRegenerate} disabled={isLoading}>
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                    Try Again
+                  </Button>
                 </div>
               )}
 

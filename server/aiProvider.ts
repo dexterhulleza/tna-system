@@ -3,8 +3,11 @@
  * Routes LLM calls through the admin-configured provider:
  *   - "builtin"  → Manus built-in LLM
  *   - "openai"   → OpenAI API (GPT-4o, GPT-4 Turbo, etc.)
- *   - "gemini"   → Google Gemini API with automatic fallback to gemini-1.5-flash on quota errors
+ *   - "gemini"   → Google Gemini API with automatic multi-model fallback chain on quota errors
  *   - "custom"   → Any OpenAI-compatible endpoint (Azure, Together, Groq, Ollama…)
+ *
+ * Gemini fallback chain (on quota exhaustion):
+ *   configured model → gemini-1.5-pro → gemini-1.5-flash → gemini-1.0-pro → built-in LLM
  */
 
 import OpenAI from "openai";
@@ -31,8 +34,12 @@ export interface LLMCallOptions {
   };
 }
 
-/** The model used as automatic fallback when the primary Gemini model hits quota. */
-const GEMINI_FALLBACK_MODEL = "gemini-1.5-flash";
+/**
+ * Ordered list of fallback models to try when the primary Gemini model hits quota.
+ * Models are tried in order; the first one that succeeds is used.
+ * If all fail, the system falls back to the built-in Manus LLM.
+ */
+const GEMINI_FALLBACK_CHAIN = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"];
 
 /**
  * Returns true if the error is a Gemini quota-exhaustion (429 / RESOURCE_EXHAUSTED).
@@ -113,43 +120,64 @@ async function invokeGemini(
 }
 
 /**
- * Invoke Gemini with automatic fallback to GEMINI_FALLBACK_MODEL on quota errors.
- * Returns { text, modelUsed, usedFallback } so callers can log/surface the fallback.
+ * Invoke Gemini with automatic multi-model fallback chain on quota errors.
+ * Tries: primaryModel → each model in GEMINI_FALLBACK_CHAIN → built-in LLM.
+ * Returns { text, modelUsed, usedFallback, usedBuiltin }.
  */
 async function invokeGeminiWithFallback(
   apiKey: string,
   primaryModel: string,
   messages: LLMMessage[],
-  jsonMode: boolean
-): Promise<{ text: string; modelUsed: string; usedFallback: boolean }> {
-  try {
-    const text = await invokeGemini(apiKey, primaryModel, messages, jsonMode);
-    return { text, modelUsed: primaryModel, usedFallback: false };
-  } catch (primaryErr: any) {
-    if (!isGeminiQuotaError(primaryErr)) {
-      // Non-quota error — re-throw with friendly message
-      throw new Error(parseGeminiError(primaryErr, primaryModel));
-    }
+  jsonMode: boolean,
+  llmOptions: LLMCallOptions
+): Promise<{ text: string; modelUsed: string; usedFallback: boolean; usedBuiltin: boolean }> {
+  // Build the full chain: primary + fallbacks (skip if primary is already in chain)
+  const chain = [
+    primaryModel,
+    ...GEMINI_FALLBACK_CHAIN.filter((m) => m !== primaryModel),
+  ];
 
-    // Quota error on primary model — try fallback (unless it's already the fallback)
-    if (primaryModel === GEMINI_FALLBACK_MODEL) {
-      throw new Error(parseGeminiError(primaryErr, primaryModel));
-    }
+  let lastQuotaError: any = null;
 
-    console.warn(
-      `[AI] Gemini quota exhausted for "${primaryModel}". Retrying with fallback "${GEMINI_FALLBACK_MODEL}"…`
-    );
-
+  for (const model of chain) {
     try {
-      const text = await invokeGemini(apiKey, GEMINI_FALLBACK_MODEL, messages, jsonMode);
-      return { text, modelUsed: GEMINI_FALLBACK_MODEL, usedFallback: true };
-    } catch (fallbackErr: any) {
-      // Both models failed — surface a combined message
-      const fallbackMsg = parseGeminiError(fallbackErr, GEMINI_FALLBACK_MODEL);
-      throw new Error(
-        `Primary model "${primaryModel}" quota exhausted. Fallback "${GEMINI_FALLBACK_MODEL}" also failed: ${fallbackMsg}`
-      );
+      const text = await invokeGemini(apiKey, model, messages, jsonMode);
+      return {
+        text,
+        modelUsed: model,
+        usedFallback: model !== primaryModel,
+        usedBuiltin: false,
+      };
+    } catch (err: any) {
+      if (isGeminiQuotaError(err)) {
+        lastQuotaError = err;
+        console.warn(
+          `[AI] Gemini quota exhausted for "${model}".${model !== chain[chain.length - 1] ? ` Trying next fallback…` : " All Gemini models exhausted."}`
+        );
+        continue; // try next model in chain
+      }
+      // Non-quota error — surface with friendly message immediately
+      throw new Error(parseGeminiError(err, model));
     }
+  }
+
+  // All Gemini models exhausted — fall back to built-in LLM
+  console.warn("[AI] All Gemini models quota-exhausted. Falling back to built-in LLM.");
+  try {
+    const result = await invokeLLM({
+      messages: llmOptions.messages,
+      ...(llmOptions.response_format
+        ? { response_format: llmOptions.response_format as any }
+        : {}),
+    });
+    const text = (result.choices?.[0]?.message?.content as string) ?? "";
+    return { text, modelUsed: "built-in", usedFallback: true, usedBuiltin: true };
+  } catch (builtinErr: any) {
+    // Both Gemini chain and built-in failed — surface a combined error
+    const quotaMsg = parseGeminiError(lastQuotaError, primaryModel);
+    throw new Error(
+      `${quotaMsg} Built-in LLM fallback also failed: ${builtinErr?.message ?? "Unknown error"}. Please try again later or switch to a different AI provider in Admin → AI Settings.`
+    );
   }
 }
 
@@ -159,12 +187,12 @@ async function invokeGeminiWithFallback(
 function parseGeminiError(err: any, model: string): string {
   const raw: string = err?.message ?? String(err) ?? "Unknown error";
 
-  // 429 – quota exhausted
+  // 429 – quota exhausted (check this FIRST before other checks)
   if (isGeminiQuotaError(err)) {
     const retryMatch = raw.match(/retry in ([\d.]+s)/i);
     const retryHint = retryMatch ? ` Retry in ${retryMatch[1]}.` : " Please wait before retrying.";
     if (raw.includes("free_tier") || raw.includes("FreeTier")) {
-      return `Free-tier quota exhausted for model "${model}".${retryHint} To continue, enable billing at console.cloud.google.com or switch to a model with remaining free quota (e.g. gemini-1.5-flash).`;
+      return `Free-tier quota exhausted for model "${model}".${retryHint} To continue, enable billing at console.cloud.google.com or switch to a model with remaining free quota.`;
     }
     return `API quota exceeded for model "${model}".${retryHint} Check your usage at ai.dev/rate-limit.`;
   }
@@ -191,26 +219,28 @@ function parseGeminiError(err: any, model: string): string {
 
 /**
  * Invoke LLM using the configured provider.
- * For Gemini, automatically falls back to gemini-1.5-flash on quota errors.
+ * For Gemini, automatically tries a fallback chain on quota errors,
+ * ultimately falling back to the built-in Manus LLM if all Gemini models are exhausted.
  */
 export async function invokeAI(options: LLMCallOptions): Promise<string> {
   const settings = await getActiveAiSettings();
   const isJsonMode = !!options.response_format;
 
   if (settings && settings.provider !== "builtin" && settings.apiKey) {
-    // ── Gemini (with auto-fallback) ────────────────────────────────────────
+    // ── Gemini (with multi-model fallback chain) ───────────────────────────
     if (settings.provider === "gemini") {
       const primaryModel = settings.model || "gemini-1.5-pro";
-      const { text, modelUsed, usedFallback } = await invokeGeminiWithFallback(
+      const { text, modelUsed, usedFallback, usedBuiltin } = await invokeGeminiWithFallback(
         settings.apiKey,
         primaryModel,
         options.messages,
-        isJsonMode
+        isJsonMode,
+        options
       );
-      if (usedFallback) {
-        console.info(
-          `[AI] Used fallback model "${modelUsed}" because "${primaryModel}" quota was exhausted.`
-        );
+      if (usedBuiltin) {
+        console.info("[AI] All Gemini models were quota-exhausted; used built-in LLM as final fallback.");
+      } else if (usedFallback) {
+        console.info(`[AI] Used fallback model "${modelUsed}" because "${primaryModel}" quota was exhausted.`);
       }
       return text;
     }
@@ -234,7 +264,7 @@ export async function invokeAI(options: LLMCallOptions): Promise<string> {
     return response.choices[0]?.message?.content ?? "";
   }
 
-  // ── Built-in Manus LLM (fallback) ─────────────────────────────────────────
+  // ── Built-in Manus LLM ─────────────────────────────────────────────────────
   const result = await invokeLLM({
     messages: options.messages,
     ...(options.response_format
@@ -247,7 +277,7 @@ export async function invokeAI(options: LLMCallOptions): Promise<string> {
 
 /**
  * Test a connection with the given settings (without saving).
- * For Gemini, if the primary model hits quota, automatically tests the fallback model.
+ * For Gemini, if the primary model hits quota, tests fallback models.
  */
 export async function testAiConnection(
   provider: string,
@@ -267,23 +297,34 @@ export async function testAiConnection(
     }
   }
 
-  // ── Gemini (with auto-fallback on quota) ───────────────────────────────────
+  // ── Gemini (with fallback chain) ───────────────────────────────────────────
   if (provider === "gemini") {
     if (!apiKey) {
       return { success: false, message: "API key is required for Gemini." };
     }
     const primaryModel = model || "gemini-1.5-pro";
+    const testOptions: LLMCallOptions = {
+      messages: [{ role: "user", content: 'Reply with exactly: {"status":"ok"}' }],
+    };
     try {
-      const { modelUsed, usedFallback } = await invokeGeminiWithFallback(
+      const { modelUsed, usedFallback, usedBuiltin } = await invokeGeminiWithFallback(
         apiKey,
         primaryModel,
-        [{ role: "user", content: 'Reply with exactly: {"status":"ok"}' }],
-        false
+        testOptions.messages,
+        false,
+        testOptions
       );
+      if (usedBuiltin) {
+        return {
+          success: true,
+          message: `API key is valid but all Gemini models (${[primaryModel, ...GEMINI_FALLBACK_CHAIN].join(", ")}) have exhausted their quota. The system will use the built-in LLM as a final fallback for AI analysis.`,
+          modelUsed: "built-in",
+        };
+      }
       if (usedFallback) {
         return {
           success: true,
-          message: `API key is valid. Note: "${primaryModel}" quota is exhausted — automatically using fallback model "${GEMINI_FALLBACK_MODEL}". AI analysis will use "${GEMINI_FALLBACK_MODEL}" until the quota resets or you switch models.`,
+          message: `API key is valid. Note: "${primaryModel}" quota is exhausted — automatically using fallback model "${modelUsed}". AI analysis will use "${modelUsed}" until the quota resets.`,
           modelUsed,
         };
       }
