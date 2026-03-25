@@ -211,86 +211,98 @@ export const appRouter = router({
           priorityAreas: surveyConfig?.priorityAreas ?? [],
           regulatoryRequirements: surveyConfig?.regulatoryRequirements ?? null,
         };
-        // Generate AI analysis narrative covering all 14 KRA dimensions
-        const prompt = `You are a senior Training Needs Analysis (TNA) expert and organizational development consultant with deep expertise in WorldSkills International competency frameworks, TESDA CBT standards, the ADDIE model, and evidence-based workforce development practices.
+        // Generate AI analysis — plain-language, action-oriented training plan
+        const prompt = `You are a practical training advisor helping an organization understand what training they need and why. Your job is to write a clear, easy-to-understand Training Action Plan based on survey results.
 
-Analyze the TNA survey data below and produce a comprehensive, structured analytical report for administrators. The report must address ALL of the following 14 Key Result Areas (KRAs), grounding each section in the survey data and the organization's stated objectives:
-
-**THEORETICAL FRAMEWORK BASIS:**
-- Mager & Pipe (1984) Performance Analysis Model — distinguishing skill deficiencies from motivational/environmental issues
-- Boydell (1976) Three-Level TNA Model — organizational, job/task, and individual analysis levels
-- McGhee & Thayer (1961) Three-Level Training Needs Assessment — organizational, task, and person analysis
-- ADDIE Instructional Design Model — Analysis phase as the foundation for training design
-- Philippine TESDA Competency-Based Training (CBT) framework — competency standards alignment
-- Kirkpatrick (1994) Four-Level Evaluation Model — for training effectiveness measurement
-
-**REQUIRED REPORT SECTIONS:**
-
-## Executive Summary
-Summarize the group's overall training needs profile in 3-4 sentences, referencing the organization's stated objectives and the most critical gaps found.
-
-## Analysis Methodology
-Explain the TNA methodology: the five-category survey framework (Organizational, Job/Task, Individual, Training Feasibility, Evaluation & Success), Likert-scale scoring, gap calculation method (score vs. maximum possible score as percentage gap), and how the survey configuration objectives shaped the question design.
-
-## KRA 1: Strategic Alignment & Organizational Capability
-Assess how current staff competencies align with the stated strategic priorities and business goals. Identify critical capability gaps relative to organizational direction. Address: alignment of staff competencies with strategic priorities, identification of critical capability gaps, readiness for digital transformation, future skills needed for innovation, succession readiness, and alignment with business expansion plans.
-
-## KRA 2: Core Competency Gaps
-Identify technical and professional skill deficiencies. Provide percentage estimates where data supports it. Cover: technical skill gaps by department, professional skills (communication, leadership, project management), digital skills and data literacy, compliance-related competencies, certification or licensing gaps, and skills needed for quality and productivity improvement.
-
-## KRA 3: Job Role Competency Mapping
-Compare required vs. existing competencies. Identify gaps per role, department, and career level (entry, supervisory, managerial). Identify critical roles requiring urgent upskilling.
-
-## KRA 4: Performance Improvement Needs
-Identify training that directly improves operational output. Reference low-productivity areas, common operational errors, quality issues, process inefficiencies caused by skill gaps, and training required to improve KPIs.
-
-## KRA 5: Future Workforce Planning & Succession
-Assess sustainability of human resources. Identify hard-to-fill positions, skills concentration risks (single-person knowledge), succession pipeline readiness, and leadership development needs.
-
-## KRA 6: Learning & Development Priorities
-Identify preferred training formats (online, blended, face-to-face), training frequency preferences, availability constraints, interest areas for career development, and priority training topics ranked by the data.
-
-## KRA 7: Digital Transformation & Technology Readiness
-Assess workforce readiness for automation, AI-assisted work, digital literacy levels, familiarity with automation tools, cloud-based systems readiness, and ICT competency levels. Note relevance to ERP, LMS, CRM, AI tools, and automation workflows if applicable.
-
-## KRA 8: Leadership and Management Development Needs
-Identify leadership competency gaps, supervisory skills needs, coaching and mentoring capability, conflict management skills, strategic thinking capability, and decision-making capability.
-
-## KRA 9: Compliance, Regulatory, and Policy Training Needs
-Identify mandatory training requirements, health and safety training needs, ethics and governance training needs, industry certification requirements, and regulatory compliance gaps. Include data privacy, occupational safety, procurement compliance, and quality standards where relevant.
-
-## KRA 10: Employee Career Development & Retention Factors
-Assess career pathway clarity, employee aspirations, interest in promotion, training interest areas, willingness to reskill, and job satisfaction related to skills development.
-
-## KRA 11: Department-Level Training Demand Analysis
-Identify priority departments for intervention, departments requiring specialized technical training, departments requiring process improvement training, and training needs based on operational complexity.
-
-## KRA 12: Training Investment Prioritization
-Provide a prioritization matrix (Urgent vs. Important), identify high-impact training areas, cost-benefit considerations, quick-win training interventions, and long-term capability building programs.
-
-## KRA 13: Risk Areas Affecting Operations
-Identify skills gaps affecting business continuity, dependency on single employees, knowledge loss risk, technology transition risk, and compliance risk areas.
-
-## KRA 14: Innovation and Future Skills Readiness
-Assess AI literacy levels, innovation capability, problem-solving capability, creativity, adaptability to new technology, and cross-functional collaboration capability.
-
-## Priority Training Recommendations
-Provide 5-7 specific, actionable training interventions with rationale, suggested timeline (short/medium/long-term), and expected impact. Align each recommendation with the organization's stated business goals and priority areas.
-
-## Conclusion
-Summarize the urgency and expected organizational impact of addressing the identified gaps, referencing the stated objectives and the theoretical frameworks applied.
+IMPORTANT WRITING RULES:
+- Write as if explaining to a manager or HR officer who is NOT a training expert
+- Use simple, everyday language — avoid jargon and academic terms
+- Be specific: use actual numbers, percentages, and topic names from the data
+- Be direct: tell them exactly what to do, not just what was observed
+- Use short paragraphs and bullet points for easy reading
+- If data is limited, say so honestly and suggest what additional info is needed
 
 ---
 SURVEY DATA:
 ${JSON.stringify(statsContext, null, 2)}
+---
 
-Write in a professional, academic tone suitable for a government or institutional training report. Use specific numbers and percentages from the data wherever possible. Where data is insufficient for a specific KRA, note what additional data collection would be needed. Format with clear markdown headings.`
+Write the Training Action Plan using EXACTLY these sections in order:
+
+## 📋 Quick Summary
+In 3-5 plain sentences: Who took this survey, what sector/group, how many people, and the single most important training finding. Make it something a busy executive can read in 30 seconds.
+
+## 🎯 What This Survey Is About
+Explain the purpose of this TNA in simple terms:
+- What organization or group is this for?
+- What were they trying to find out?
+- What business goals or objectives are they trying to achieve?
+- Who are the participants (their roles, experience level)?
+
+## ⚠️ What Happens If We Do Nothing
+List 3-5 specific, realistic consequences of NOT providing training. Be concrete — mention productivity loss, compliance risks, competitive disadvantage, staff turnover, safety issues, or missed opportunities. Make it feel urgent but honest.
+
+## 📚 Recommended Training Topics
+List each recommended training topic as a clear, named course or program. For each topic:
+**Topic Title:** [Specific, descriptive name like "Advanced 3D Animation Pipeline for Production" not just "Animation Training"]
+- **Why this is needed:** One sentence explaining the gap this fills
+- **Who should attend:** Specific roles or departments
+- **Priority level:** 🔴 Urgent (do within 1-3 months) / 🟡 Important (3-6 months) / 🟢 Plan ahead (6-12 months)
+- **Suggested format:** Face-to-face workshop / Online self-paced / Blended / On-the-job coaching
+- **Estimated duration:** (e.g., 2 days, 40 hours, 3-month program)
+
+## 💰 Training Investment Guide
+Provide a practical investment overview:
+- **Budget range estimate:** Low / Medium / High investment (explain what factors drive cost)
+- **Suggested schedule:** Propose a realistic training calendar (e.g., Q1: Topic A, Q2: Topic B)
+- **Quick wins:** Which training can be done cheaply and quickly with high impact?
+- **Long-term investments:** Which training requires more budget but builds lasting capability?
+- **Cost-saving tips:** Any ways to reduce cost (e.g., internal trainers, online platforms, batch training)
+
+## 🏆 What Skills Will Be Gained
+For each major training area, list the specific competencies participants will have AFTER training:
+- Use action verbs: "Will be able to...", "Can now...", "Knows how to..."
+- Group by skill category (Technical Skills, Soft Skills, Leadership, Compliance, etc.)
+- Connect each skill to a real job task or business outcome
+
+## 📈 Expected Results After Training
+What will improve in the organization after training is completed? Be specific:
+- Performance improvements (e.g., "Reduce production errors by an estimated X%")
+- Efficiency gains (e.g., "Faster project completion, less rework")
+- Quality improvements
+- Employee confidence and morale
+- Compliance or certification achievements
+- Business goal progress (connect back to stated objectives)
+
+## 🎓 Learning Outcomes Per Training Area
+For each recommended training topic, state 3-5 clear learning outcomes using this format:
+"After completing [Topic Name], participants will be able to: [specific, measurable outcome]"
+Keep these practical and job-relevant, not theoretical.
+
+## 📅 Suggested Training Schedule
+Provide a simple 12-month training roadmap:
+- **Months 1-3 (Urgent):** [List topics]
+- **Months 4-6 (Important):** [List topics]
+- **Months 7-12 (Development):** [List topics]
+Include any prerequisites (e.g., "Topic B should come after Topic A")
+
+## 👥 Who Should Attend What
+Create a simple table or list showing:
+- Which training is for ALL staff
+- Which training is for specific roles or departments
+- Which training is for managers/supervisors only
+- Which training is optional but recommended
+
+## 🔑 Key Takeaways for Decision-Makers
+End with 5-7 bullet points that a CEO, HR Director, or Department Head can act on immediately. Each bullet should be one clear, actionable sentence starting with a verb (e.g., "Allocate budget for...", "Schedule...", "Partner with...", "Prioritize...").
+
+Write in a warm, professional tone — like a trusted advisor giving honest advice, not a formal academic report. Use the actual data numbers wherever possible.`
 
         let aiAnalysis: string | null = null;
         try {
           const llmResult = await invokeLLM({
             messages: [
-              { role: "system", content: "You are an expert TNA analyst writing a formal institutional report." },
+              { role: "system", content: "You are a practical training advisor who writes clear, action-oriented training plans for non-specialist audiences. You use plain language, specific recommendations, and always focus on what the organization should DO next." },
               { role: "user", content: prompt },
             ],
           });

@@ -201,16 +201,38 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
                 </div>
               )}
 
-              {/* AI Analysis Narrative */}
+              {/* AI Training Action Plan */}
               {data.analysis ? (
-                <div className="border rounded-xl p-5 bg-gradient-to-br from-primary/5 to-transparent">
-                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <Brain className="w-4 h-4 text-primary" />
-                    AI-Generated Group Analysis
-                    <Badge variant="secondary" className="text-xs ml-auto">Powered by LLM</Badge>
-                  </h4>
-                  <div className="prose prose-sm max-w-none text-foreground [&_h2]:font-display [&_h2]:text-base [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:font-semibold [&_h3]:text-sm [&_h3]:mt-3 [&_h3]:mb-1 [&_p]:text-sm [&_p]:leading-relaxed [&_ul]:text-sm [&_li]:mb-1 [&_strong]:font-semibold">
-                    <ReactMarkdown>{data.analysis}</ReactMarkdown>
+                <div className="border rounded-xl overflow-hidden">
+                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-5 py-3 border-b flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-4 h-4 text-primary" />
+                      <h4 className="text-sm font-semibold text-foreground">Training Action Plan</h4>
+                      <span className="text-xs text-muted-foreground hidden sm:inline">— AI-generated based on survey results & objectives</span>
+                    </div>
+                    <Badge variant="secondary" className="text-xs shrink-0">AI-Generated</Badge>
+                  </div>
+                  <div className="p-5">
+                    <div className="
+                      prose prose-sm max-w-none
+                      text-foreground
+                      [&_h2]:font-bold [&_h2]:text-[0.95rem] [&_h2]:mt-7 [&_h2]:mb-3
+                      [&_h2]:pb-2 [&_h2]:border-b [&_h2]:border-border
+                      [&_h2]:text-foreground [&_h2:first-child]:mt-0
+                      [&_h3]:font-semibold [&_h3]:text-sm [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-foreground
+                      [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-foreground/90 [&_p]:mb-3
+                      [&_ul]:text-sm [&_ul]:space-y-1.5 [&_ul]:my-2 [&_ul]:pl-5 [&_ul]:list-disc
+                      [&_ol]:text-sm [&_ol]:space-y-1.5 [&_ol]:my-2 [&_ol]:pl-5 [&_ol]:list-decimal
+                      [&_li]:text-foreground/90 [&_li]:leading-relaxed
+                      [&_strong]:font-semibold [&_strong]:text-foreground
+                      [&_blockquote]:border-l-4 [&_blockquote]:border-primary/40 [&_blockquote]:pl-4 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_blockquote]:italic [&_blockquote]:my-3
+                      [&_table]:text-xs [&_table]:w-full [&_table]:my-3 [&_table]:border-collapse
+                      [&_th]:text-left [&_th]:font-semibold [&_th]:pb-2 [&_th]:border-b [&_th]:border-border [&_th]:pr-4
+                      [&_td]:py-1.5 [&_td]:border-b [&_td]:border-border/50 [&_td]:pr-4
+                      [&_hr]:border-border [&_hr]:my-4
+                    ">
+                      <ReactMarkdown>{data.analysis}</ReactMarkdown>
+                    </div>
                   </div>
                 </div>
               ) : (
