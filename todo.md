@@ -108,3 +108,6 @@
 
 ## Bug Fixes (Mar 25 2026)
 - [x] Fix: login on published site (tna1.net) redirects to home but user is not logged in (OAuth state encoding mismatch - fixed btoa(JSON.stringify) to btoa(redirectUri))
+
+## Bug Fixes (Mar 25 2026 - cont.)
+- [x] Fix: AI-generated questions from Survey Configuration not appearing in actual survey (added addToQuestionBank procedure that inserts accepted questions into the questions table)

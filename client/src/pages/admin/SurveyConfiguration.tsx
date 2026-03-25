@@ -168,8 +168,12 @@ export default function SurveyConfiguration() {
   });
 
   const acceptQuestions = trpc.surveyConfig.acceptQuestions.useMutation({
+    onSuccess: () => {},
+    onError: (e) => toast.error(e.message),
+  });
+  const addToQuestionBank = trpc.surveyConfig.addToQuestionBank.useMutation({
     onSuccess: (data) => {
-      toast.success(`${data.count} questions accepted and saved.`);
+      toast.success(`${data.inserted} questions added to the question bank and will now appear in surveys.`);
       utils.questions.list.invalidate();
     },
     onError: (e) => toast.error(e.message),
@@ -243,7 +247,11 @@ export default function SurveyConfiguration() {
     if (!configId) return;
     const indices = aiQuestions.map((q, i) => q.accepted ? i : -1).filter((i) => i >= 0);
     if (indices.length === 0) { toast.error("No questions selected."); return; }
-    acceptQuestions.mutate({ configId, acceptedIndices: indices });
+    // Mark as accepted in config JSON, then insert into the questions table
+    acceptQuestions.mutate(
+      { configId, acceptedIndices: indices },
+      { onSuccess: () => addToQuestionBank.mutate({ configId: configId!, acceptedIndices: indices }) }
+    );
   };
 
   const acceptedCount = aiQuestions.filter((q) => q.accepted).length;
@@ -567,8 +575,8 @@ export default function SurveyConfiguration() {
                         {generateQuestions.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                         Regenerate
                       </Button>
-                      <Button size="sm" onClick={handleAcceptSelected} disabled={acceptedCount === 0 || acceptQuestions.isPending} className="gap-1.5">
-                        {acceptQuestions.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      <Button size="sm" onClick={handleAcceptSelected} disabled={acceptedCount === 0 || acceptQuestions.isPending || addToQuestionBank.isPending} className="gap-1.5">
+                        {(acceptQuestions.isPending || addToQuestionBank.isPending) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                         Add {acceptedCount > 0 ? `${acceptedCount} ` : ""}to Question Bank
                       </Button>
                     </div>

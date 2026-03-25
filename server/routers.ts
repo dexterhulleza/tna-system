@@ -681,6 +681,53 @@ Generate questions that directly address the stated objectives, business goals, 
           await saveAiGeneratedQuestions(input.configId, updated);
           return { success: true, count: input.acceptedIndices.length };
         }),
+      addToQuestionBank: protectedProcedure
+        .input(
+          z.object({
+            configId: z.number(),
+            acceptedIndices: z.array(z.number()),
+          })
+        )
+        .mutation(async ({ input, ctx }) => {
+          const db_module = await import("./db");
+          const db = await db_module.getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+          const { surveyConfigurations: scTable, questions: qTable } = await import("../drizzle/schema");
+          const { eq: eqOp } = await import("drizzle-orm");
+          const [config] = await db.select().from(scTable).where(eqOp(scTable.id, input.configId)).limit(1);
+          if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+          const existing = (config.aiGeneratedQuestions ?? []) as Array<{ questionText: string; category: string; questionType: string; rationale: string; accepted: boolean }>;
+          const toInsert = input.acceptedIndices
+            .map(i => existing[i])
+            .filter(Boolean);
+          if (toInsert.length === 0) return { success: true, inserted: 0 };
+          // Map AI category names to valid enum values
+          const validCategories = ["organizational", "job_task", "individual", "training_feasibility", "evaluation_success", "custom"] as const;
+          const validTypes = ["rating", "yes_no", "scale", "text", "multiple_choice"] as const;
+          const rows = toInsert.map(q => {
+            const cat = validCategories.includes(q.category as typeof validCategories[number])
+              ? q.category as typeof validCategories[number]
+              : "custom";
+            const qtype = validTypes.includes(q.questionType as typeof validTypes[number])
+              ? q.questionType as typeof validTypes[number]
+              : "rating";
+            return {
+              questionText: q.questionText,
+              category: cat,
+              customCategory: cat === "custom" ? q.category : null,
+              questionType: qtype,
+              sectorId: null, // AI questions apply to all sectors; scoped by groupId instead
+              groupId: config.groupId ?? null,
+              helpText: q.rationale ?? null,
+              isActive: true,
+            };
+          });
+          await db.insert(qTable).values(rows);
+          // Mark all accepted questions in the config
+          const updated = existing.map((q, i) => ({ ...q, accepted: input.acceptedIndices.includes(i) }));
+          await saveAiGeneratedQuestions(input.configId, updated);
+          return { success: true, inserted: rows.length };
+        }),
     }),
 });
 export type AppRouter = typeof appRouter;
