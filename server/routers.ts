@@ -211,98 +211,120 @@ export const appRouter = router({
           priorityAreas: surveyConfig?.priorityAreas ?? [],
           regulatoryRequirements: surveyConfig?.regulatoryRequirements ?? null,
         };
-        // Generate AI analysis — plain-language, action-oriented training plan
-        const prompt = `You are a practical training advisor helping an organization understand what training they need and why. Your job is to write a clear, easy-to-understand Training Action Plan based on survey results.
+        // Generate AI analysis — TESDA/NTESDP framework: Industry Demand → Competency Gaps → Training Priorities → Implementation Plan
+        const prompt = `You are a senior Training Needs Analysis specialist working within the TESDA (Technical Education and Skills Development Authority) framework and aligned with the National Technical Education and Skills Development Plan (NTESDP). Your task is to produce a comprehensive, structured TNA report based on survey results and group configuration data.
 
-IMPORTANT WRITING RULES:
-- Write as if explaining to a manager or HR officer who is NOT a training expert
-- Use simple, everyday language — avoid jargon and academic terms
-- Be specific: use actual numbers, percentages, and topic names from the data
-- Be direct: tell them exactly what to do, not just what was observed
-- Use short paragraphs and bullet points for easy reading
-- If data is limited, say so honestly and suggest what additional info is needed
+Write for a mixed audience: HR managers, training officers, industry partners, and government officials. Use clear, professional language — avoid overly academic jargon but maintain technical accuracy appropriate for workforce development planning.
 
 ---
-SURVEY DATA:
+SURVEY DATA AND GROUP CONFIGURATION:
 ${JSON.stringify(statsContext, null, 2)}
 ---
 
-Write the Training Action Plan using EXACTLY these sections in order:
+Produce the TNA Analysis Report using EXACTLY the following 9 sections in order. Use the section headings exactly as written below.
 
-## 📋 Quick Summary
-In 3-5 plain sentences: Who took this survey, what sector/group, how many people, and the single most important training finding. Make it something a busy executive can read in 30 seconds.
+## Section 1: Industry Profile and Context
 
-## 🎯 What This Survey Is About
-Explain the purpose of this TNA in simple terms:
-- What organization or group is this for?
-- What were they trying to find out?
-- What business goals or objectives are they trying to achieve?
-- Who are the participants (their roles, experience level)?
+Analyze the industry direction and future skills demand for this group/sector. Cover:
+- **Industry Overview:** Describe the current state and growth trajectory of the industry/sector represented by this group. Reference global and local trends.
+- **Future Skills Demand:** What competencies will be in high demand in the next 3-5 years? Consider automation, digitalization, regulatory changes, and market shifts.
+- **Industry Challenges:** What are the key challenges this sector faces that training must address?
+- **Alignment with NTESDP:** How does this group's training needs align with national priority sectors and the NTESDP goals?
+- **Regulatory and Standards Context:** Mention relevant TESDA qualifications, Philippine Qualifications Framework (PQF) levels, or industry standards that apply.
 
-## ⚠️ What Happens If We Do Nothing
-List 3-5 specific, realistic consequences of NOT providing training. Be concrete — mention productivity loss, compliance risks, competitive disadvantage, staff turnover, safety issues, or missed opportunities. Make it feel urgent but honest.
+## Section 2: Occupational Mapping (Job Role Analysis)
 
-## 📚 Recommended Training Topics
-List each recommended training topic as a clear, named course or program. For each topic:
-**Topic Title:** [Specific, descriptive name like "Advanced 3D Animation Pipeline for Production" not just "Animation Training"]
-- **Why this is needed:** One sentence explaining the gap this fills
-- **Who should attend:** Specific roles or departments
-- **Priority level:** 🔴 Urgent (do within 1-3 months) / 🟡 Important (3-6 months) / 🟢 Plan ahead (6-12 months)
-- **Suggested format:** Face-to-face workshop / Online self-paced / Blended / On-the-job coaching
-- **Estimated duration:** (e.g., 2 days, 40 hours, 3-month program)
+Identify priority job roles and their competency requirements based on the survey data. Cover:
+- **Priority Job Roles Identified:** List the key occupational roles represented in this survey group (based on participant roles and sector data).
+- **Core Competency Requirements per Role:** For each priority role, list the essential competencies required (technical/functional, core, and cross-cutting).
+- **Current Competency Level:** Based on survey scores, describe the current average competency level of participants.
+- **Required Competency Level:** What level is needed to meet industry standards or organizational goals?
+- **Critical Role Gaps:** Which roles show the most significant gap between current and required competency?
 
-## 💰 Training Investment Guide
-Provide a practical investment overview:
-- **Budget range estimate:** Low / Medium / High investment (explain what factors drive cost)
-- **Suggested schedule:** Propose a realistic training calendar (e.g., Q1: Topic A, Q2: Topic B)
-- **Quick wins:** Which training can be done cheaply and quickly with high impact?
-- **Long-term investments:** Which training requires more budget but builds lasting capability?
-- **Cost-saving tips:** Any ways to reduce cost (e.g., internal trainers, online platforms, batch training)
+## Section 3: Competency Gap Analysis
 
-## 🏆 What Skills Will Be Gained
-For each major training area, list the specific competencies participants will have AFTER training:
-- Use action verbs: "Will be able to...", "Can now...", "Knows how to..."
-- Group by skill category (Technical Skills, Soft Skills, Leadership, Compliance, etc.)
-- Connect each skill to a real job task or business outcome
+Determine the gaps between current competencies and required competencies. Cover:
+- **Overall Gap Summary:** State the overall average score (${statsContext.averageScore}/100) and what it means in plain terms.
+- **Gap by Category:** For each TNA category (Organizational, Job/Task, Individual, Training Feasibility, Evaluation), describe the gap level and what it indicates.
+- **Top 5 Critical Gaps:** List the most frequently identified gaps from the survey, with gap percentage and business impact.
+- **Root Cause Analysis:** For each major gap, suggest the likely root cause (lack of training, outdated equipment, poor processes, unclear standards, etc.).
+- **Gap Priority Classification:** Classify each gap as Critical (immediate action needed), Significant (action within 6 months), or Moderate (plan within 12 months).
 
-## 📈 Expected Results After Training
-What will improve in the organization after training is completed? Be specific:
-- Performance improvements (e.g., "Reduce production errors by an estimated X%")
-- Efficiency gains (e.g., "Faster project completion, less rework")
-- Quality improvements
-- Employee confidence and morale
-- Compliance or certification achievements
-- Business goal progress (connect back to stated objectives)
+## Section 4: Skills Categorization (Aligned with TESDA Framework)
 
-## 🎓 Learning Outcomes Per Training Area
-For each recommended training topic, state 3-5 clear learning outcomes using this format:
-"After completing [Topic Name], participants will be able to: [specific, measurable outcome]"
-Keep these practical and job-relevant, not theoretical.
+Categorize identified skills gaps according to the TESDA competency framework:
+- **Basic Competencies:** Communication, teamwork, problem-solving, workplace safety, environmental awareness. Which are deficient?
+- **Common Competencies:** Sector-wide technical skills applicable across multiple job roles. What gaps exist?
+- **Core Competencies:** Specific technical skills required for the particular qualification/job role. What are the critical gaps?
+- **Cross-Cutting Competencies:** Digital literacy, entrepreneurship, innovation, sustainability. What is the current level?
+- **TESDA Qualification Alignment:** Map identified gaps to specific TESDA National Certificates (NC I, NC II, NC III, NC IV) or qualifications that would address them.
 
-## 📅 Suggested Training Schedule
-Provide a simple 12-month training roadmap:
-- **Months 1-3 (Urgent):** [List topics]
-- **Months 4-6 (Important):** [List topics]
-- **Months 7-12 (Development):** [List topics]
-Include any prerequisites (e.g., "Topic B should come after Topic A")
+## Section 5: Technology and Equipment Requirements Analysis
 
-## 👥 Who Should Attend What
-Create a simple table or list showing:
-- Which training is for ALL staff
-- Which training is for specific roles or departments
-- Which training is for managers/supervisors only
-- Which training is optional but recommended
+Identify what technology, tools, and equipment are needed for effective training delivery:
+- **Current Technology/Equipment Status:** Based on survey responses, what is the current state of technology and equipment access?
+- **Required Technology for Training:** List specific tools, software, machines, or equipment needed to deliver the recommended training.
+- **Digital Infrastructure Needs:** What digital platforms, learning management systems, or connectivity requirements are needed?
+- **Equipment Investment Estimate:** Provide a rough categorization (Low/Medium/High investment) for technology and equipment needs.
+- **Technology Gaps vs. Training Gaps:** Distinguish between gaps caused by lack of skills vs. lack of proper tools/equipment.
 
-## 🔑 Key Takeaways for Decision-Makers
-End with 5-7 bullet points that a CEO, HR Director, or Department Head can act on immediately. Each bullet should be one clear, actionable sentence starting with a verb (e.g., "Allocate budget for...", "Schedule...", "Partner with...", "Prioritize...").
+## Section 6: Training Priority Matrix
 
-Write in a warm, professional tone — like a trusted advisor giving honest advice, not a formal academic report. Use the actual data numbers wherever possible.`
+Rank training needs based on urgency, number of workers affected, economic impact, and NTESDP alignment. Present as a prioritized list:
 
+For each training priority, provide:
+**Priority [Number]: [Training Topic Name]**
+- Urgency Level: 🔴 Critical / 🟡 High / 🟢 Medium
+- Workers Affected: [Estimated number or percentage]
+- Economic Impact: High / Medium / Low (explain briefly)
+- NTESDP Alignment: [Which NTESDP priority sector or goal this supports]
+- Justification: One paragraph explaining why this is a priority
+
+End this section with a summary matrix table (in markdown table format) showing all priorities ranked.
+
+## Section 7: Training Beneficiaries
+
+Identify who should receive training and at what level:
+- **New Entrants:** What foundational training do new workers in this sector/role need?
+- **Existing Workers (Upskilling):** What skills do current employees need to upgrade to meet current standards?
+- **Existing Workers (Reskilling):** Are there workers who need to transition to new roles or adapt to new technologies?
+- **Supervisors and Team Leaders:** What management, coaching, and technical leadership training is needed?
+- **Trainers and Assessors:** What trainer upskilling or assessor certification is needed to deliver quality training?
+- **Industry Partners:** What orientation or partnership training would help industry stakeholders support training delivery?
+- **Beneficiary Count Estimate:** Based on survey data, estimate the total number of potential training beneficiaries per category.
+
+## Section 8: Training Delivery Mode Analysis
+
+Recommend the most effective and feasible training delivery approaches:
+- **Face-to-Face / Classroom Training:** Which topics require in-person instruction? Why?
+- **Online / E-Learning:** Which topics can be effectively delivered online? What platforms are recommended?
+- **Blended Learning:** Which topics benefit from a mix of online and face-to-face? Describe the blend.
+- **On-the-Job Training (OJT) / Apprenticeship:** Which competencies are best developed through supervised workplace practice?
+- **Competency-Based Training (CBT):** How should TESDA's CBT approach be applied to the priority training areas?
+- **Industry Immersion / Plant Visit:** Are there topics where exposure to actual industry environments is essential?
+- **Delivery Feasibility:** Consider geographic reach, participant availability, budget constraints, and trainer availability.
+
+## Section 9: Training Plan Output
+
+Present the final recommended training plan as a structured table. Use this exact markdown table format:
+
+| Priority | Training Program Title | Target Group | Duration | Delivery Mode | Partner Industry/Organization | Expected Outcome |
+|----------|----------------------|--------------|----------|---------------|-------------------------------|------------------|
+
+After the table, add:
+- **Implementation Timeline:** A simple 12-month rollout schedule (Q1, Q2, Q3, Q4)
+- **Estimated Total Investment:** Low / Medium / High with brief justification
+- **Quick Wins (0-3 months):** Which training can start immediately with minimal resources?
+- **Success Metrics:** How will the organization know if training was effective? List 3-5 measurable indicators.
+- **Next Steps:** List 5 concrete actions the organization should take in the next 30 days to begin implementation.
+
+---
+Write in a professional but accessible tone. Use actual data numbers from the survey results wherever possible. If data is limited, acknowledge this and provide recommendations based on the available information and industry best practices.`
         let aiAnalysis: string | null = null;
         try {
           const llmResult = await invokeLLM({
             messages: [
-              { role: "system", content: "You are a practical training advisor who writes clear, action-oriented training plans for non-specialist audiences. You use plain language, specific recommendations, and always focus on what the organization should DO next." },
+              { role: "system", content: "You are a senior TESDA-aligned Training Needs Analysis specialist. Produce structured, comprehensive TNA reports following the TESDA/NTESDP framework. Write professionally but accessibly for HR managers, training officers, and government officials." },
               { role: "user", content: prompt },
             ],
           });
@@ -662,34 +684,45 @@ Write in a warm, professional tone — like a trusted advisor giving honest advi
             config.regulatoryRequirements ? `Regulatory Requirements: ${config.regulatoryRequirements}` : "",
           ].filter(Boolean).join("\n\n");
 
-          const systemPrompt = `You are an expert Training Needs Analysis (TNA) specialist with deep knowledge of competency frameworks, adult learning theory, and workforce development. Your role is to generate targeted, practical survey questions that will effectively identify training gaps and development needs.
+          const systemPrompt = `You are a TESDA-certified Training Needs Analysis specialist with expertise in the TESDA Competency-Based Training (CBT) framework, the National Technical Education and Skills Development Plan (NTESDP), and the Philippine Qualifications Framework (PQF). Your role is to generate comprehensive, targeted survey questions that will effectively gather data across all dimensions of the TESDA TNA framework.
 
-You follow evidence-based TNA methodologies including:
-- McGhee & Thayer's Three-Level Analysis (Organizational, Job/Task, Individual)
-- Mager & Pipe's Performance Analysis model
-- Boydell's Training Needs Identification framework
-- ADDIE instructional design model
-- TESDA Competency-Based Training (CBT) standards
+The survey questions you generate must cover all 9 dimensions of the TESDA TNA framework:
+1. Industry Profile and Context — questions about industry trends, future skills demand, regulatory requirements
+2. Occupational Mapping — questions about job roles, competency requirements, role clarity
+3. Competency Gap Analysis — questions measuring current vs. required competency levels
+4. Skills Categorization — questions covering Basic, Common, Core, and Cross-Cutting competencies per TESDA
+5. Technology and Equipment Requirements — questions about tools, software, equipment access and proficiency
+6. Training Priority Assessment — questions about urgency, number of workers affected, business impact
+7. Training Beneficiaries — questions identifying who needs what type of training
+8. Training Delivery Preferences — questions about preferred learning modes, schedule constraints, accessibility
+9. Training Outcomes and Evaluation — questions about expected results, success metrics, ROI expectations
 
-Generate survey questions that are:
-1. Specific and measurable
-2. Aligned with the stated business objectives and competency gaps
-3. Appropriate for the target participant roles
-4. Grounded in the industry context provided
-5. Balanced across TNA categories (organizational, job/task, individual, training feasibility, evaluation)
+For each question, assign the most appropriate TNA category:
+- "organizational" — for industry context, strategic alignment, organizational readiness questions
+- "job_task" — for occupational mapping, competency requirements, task analysis questions
+- "individual" — for personal competency gaps, skills self-assessment, career development questions
+- "training_feasibility" — for technology needs, delivery mode, budget, schedule, beneficiary questions
+- "evaluation_success" — for expected outcomes, success metrics, training impact questions
+- "custom" — for sector-specific or group-specific questions
 
 Return ONLY a valid JSON array of question objects. Each object must have exactly these fields:
-- questionText: string (the actual survey question)
+- questionText: string (the actual survey question — clear, specific, answerable)
 - category: one of "organizational"|"job_task"|"individual"|"training_feasibility"|"evaluation_success"|"custom"
 - questionType: one of "rating"|"yes_no"|"scale"|"text"|"multiple_choice"
-- rationale: string (brief explanation of why this question is relevant based on the context)
+- rationale: string (which TESDA framework dimension this covers and why it is important)
 - accepted: boolean (always set to false initially)`;
-
-          const userPrompt = `Based on the following TNA survey configuration, generate 20-25 targeted survey questions that will help identify training needs and competency gaps.
+          const userPrompt = `Based on the following TNA survey configuration, generate 25-30 targeted survey questions that will gather comprehensive data for a TESDA-aligned Training Needs Analysis.
 
 ${contextSummary}
 
-Generate questions that directly address the stated objectives, business goals, and competency areas. Distribute questions across all relevant TNA categories. For rating/scale questions, they will use a 1-5 scale. Focus on questions that will surface actionable training insights.`;
+Requirements:
+- Distribute questions across ALL 9 TESDA TNA framework dimensions (at least 2-3 questions per dimension)
+- Include questions that identify: industry skills demand, competency gaps, technology needs, training priorities, beneficiary groups, preferred delivery modes, and expected outcomes
+- For rating/scale questions: use a 1-5 scale where 1=Very Low/Not at all and 5=Very High/Excellent
+- For multiple_choice questions: provide clear answer options in the question text
+- Make questions specific to the industry context and participant roles provided
+- Include questions that will directly feed into the Training Plan Output (priority, duration, delivery mode, expected outcomes)
+- Ensure questions are appropriate for the identified training beneficiaries (new entrants, existing workers, supervisors, trainers)`;
 
           const response = await invokeLLM({
             messages: [

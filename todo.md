@@ -119,3 +119,10 @@
 - [ ] Frontend: render full 14-KRA report in Group Analysis tab with collapsible sections
 - [ ] Frontend: show executive summary, KRA breakdown, priority matrix, and training investment recommendations
 - [ ] Frontend: include survey config objectives and business goals in the report header context
+
+## TESDA/NTESDP Framework Restructuring (Mar 25 2026)
+- [x] Rewrite AI group analysis prompt: Industry Profile & Context → Occupational Mapping → Competency Gap Analysis → Skills Categorization → Technology & Equipment Requirements → Training Priority Matrix → Training Beneficiaries → Delivery Mode Analysis → Training Plan Output table
+- [x] Rewrite AI question generation prompt to generate questions covering all 9 TESDA framework sections per group
+- [x] Update Group Analysis frontend to display all 9 sections with Training Plan Output as a structured table
+- [x] Add Export (Markdown download) and Regenerate buttons to Group Analysis
+- [x] Update explanation banner to describe TESDA/NTESDP 9-section framework

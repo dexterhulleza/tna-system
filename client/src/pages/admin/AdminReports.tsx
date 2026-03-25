@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Search, FileText, Loader2, BarChart3, User, Filter, Tag, Brain, ChevronDown, ChevronUp, Users, TrendingDown, AlertTriangle, BookOpen, Home, LayoutDashboard, ChevronRight, Target, Building2, ListChecks } from "lucide-react";
+import { Search, FileText, Loader2, BarChart3, User, Filter, Tag, Brain, ChevronDown, ChevronUp, Users, TrendingDown, AlertTriangle, Home, LayoutDashboard, ChevronRight, Target, Building2, ListChecks, RefreshCw, Download, Clock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 const GAP_LEVEL_CONFIG: Record<string, { color: string; label: string }> = {
@@ -21,12 +21,45 @@ const GAP_LEVEL_CONFIG: Record<string, { color: string; label: string }> = {
 // ─── Group Analysis Card ───────────────────────────────────────────────────────
 function GroupAnalysisCard({ group }: { group: { id: number; name: string; code: string; description: string | null } }) {
   const [expanded, setExpanded] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastGenerated, setLastGenerated] = useState<Date | null>(null);
   const [, navigate] = useLocation();
+  const prevDataRef = useRef<any>(undefined);
 
   const { data, isLoading, error } = trpc.groups.groupAnalysis.useQuery(
     { groupId: group.id },
-    { enabled: expanded }
+    {
+      enabled: expanded,
+      staleTime: refreshKey === 0 ? 5 * 60 * 1000 : 0,
+    }
   );
+
+  useEffect(() => {
+    if (data && data !== prevDataRef.current && data.analysis) {
+      setLastGenerated(new Date());
+      prevDataRef.current = data;
+    }
+  }, [data]);
+
+  const handleRegenerate = () => {
+    setRefreshKey((k) => k + 1);
+    prevDataRef.current = undefined;
+  };
+
+  const handleExport = () => {
+    if (!data?.analysis) return;
+    const header = `# TESDA Training Needs Analysis Report\n## Group: ${group.name} (${group.code})\n### Generated: ${new Date().toLocaleString()}\n\n---\n\n`;
+    const content = header + data.analysis;
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `TNA_Report_${group.code}_${new Date().toISOString().split("T")[0]}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -46,32 +79,66 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
               </div>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 shrink-0"
-            onClick={() => setExpanded((e) => !e)}
-          >
-            <Brain className="w-3.5 h-3.5 text-primary" />
-            {expanded ? "Hide Analysis" : "View Analysis"}
-            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </Button>
+          <div className="flex items-center gap-2">
+            {expanded && data?.analysis && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground hover:text-foreground"
+                  onClick={handleExport}
+                  title="Export as Markdown"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground hover:text-foreground"
+                  onClick={handleRegenerate}
+                  disabled={isLoading}
+                  title="Regenerate analysis"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                  <span className="hidden sm:inline">Regenerate</span>
+                </Button>
+              </>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={() => setExpanded((e) => !e)}
+            >
+              <Brain className="w-3.5 h-3.5 text-primary" />
+              {expanded ? "Hide Analysis" : "View Analysis"}
+              {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </Button>
+          </div>
         </div>
       </CardHeader>
 
       {expanded && (
         <CardContent className="pt-0">
           {isLoading ? (
-            <div className="flex items-center gap-3 py-8 justify-center">
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
-              <span className="text-sm text-muted-foreground">Generating AI analysis... this may take a moment.</span>
+            <div className="flex flex-col items-center gap-3 py-10 justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground">Generating TESDA-aligned analysis...</p>
+                <p className="text-xs text-muted-foreground mt-1">This may take 30–60 seconds. The AI is analyzing all 9 framework dimensions.</p>
+              </div>
             </div>
           ) : error ? (
-            <div className="text-sm text-destructive py-4">Failed to load analysis. Please try again.</div>
+            <div className="flex items-center gap-2 text-sm text-destructive py-4 px-3 bg-destructive/5 rounded-lg">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>Failed to load analysis. Please try again.</span>
+            </div>
           ) : !data ? null : data.reports.length === 0 ? (
-            <div className="py-6 text-center">
+            <div className="py-8 text-center">
               <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No completed surveys in this group yet.</p>
+              <p className="text-sm font-medium text-foreground">No completed surveys in this group yet.</p>
+              <p className="text-xs text-muted-foreground mt-1">Respondents must complete the survey and be tagged to this group before analysis can be generated.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -80,7 +147,7 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
                 <div className="border rounded-xl p-4 bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
                   <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3 flex items-center gap-2">
                     <Target className="w-4 h-4" />
-                    Survey Configuration & Objectives
+                    Survey Configuration &amp; Objectives
                   </h4>
                   <div className="space-y-2 text-sm">
                     {(data.stats as any)?.surveyTitle && (
@@ -130,6 +197,7 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
                   </div>
                 </div>
               )}
+
               {/* Quick Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-muted/40 rounded-lg p-3 text-center">
@@ -201,16 +269,26 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
                 </div>
               )}
 
-              {/* AI Training Action Plan */}
+              {/* TESDA-Aligned Training Action Plan */}
               {data.analysis ? (
                 <div className="border rounded-xl overflow-hidden">
-                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-5 py-3 border-b flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Brain className="w-4 h-4 text-primary" />
-                      <h4 className="text-sm font-semibold text-foreground">Training Action Plan</h4>
-                      <span className="text-xs text-muted-foreground hidden sm:inline">— AI-generated based on survey results & objectives</span>
+                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-5 py-3 border-b flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Brain className="w-4 h-4 text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-semibold text-foreground">TESDA-Aligned Training Action Plan</h4>
+                        <p className="text-xs text-muted-foreground hidden sm:block">AI-generated · TESDA/NTESDP framework · 9-section structured analysis</p>
+                      </div>
                     </div>
-                    <Badge variant="secondary" className="text-xs shrink-0">AI-Generated</Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {lastGenerated && (
+                        <span className="text-xs text-muted-foreground items-center gap-1 hidden sm:flex">
+                          <Clock className="w-3 h-3" />
+                          {lastGenerated.toLocaleTimeString()}
+                        </span>
+                      )}
+                      <Badge variant="secondary" className="text-xs">AI-Generated</Badge>
+                    </div>
                   </div>
                   <div className="p-5">
                     <div className="
@@ -227,12 +305,21 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
                       [&_strong]:font-semibold [&_strong]:text-foreground
                       [&_blockquote]:border-l-4 [&_blockquote]:border-primary/40 [&_blockquote]:pl-4 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_blockquote]:italic [&_blockquote]:my-3
                       [&_table]:text-xs [&_table]:w-full [&_table]:my-3 [&_table]:border-collapse
-                      [&_th]:text-left [&_th]:font-semibold [&_th]:pb-2 [&_th]:border-b [&_th]:border-border [&_th]:pr-4
+                      [&_th]:text-left [&_th]:font-semibold [&_th]:pb-2 [&_th]:border-b [&_th]:border-border [&_th]:pr-4 [&_th]:py-2
                       [&_td]:py-1.5 [&_td]:border-b [&_td]:border-border/50 [&_td]:pr-4
                       [&_hr]:border-border [&_hr]:my-4
                     ">
                       <ReactMarkdown>{data.analysis}</ReactMarkdown>
                     </div>
+                  </div>
+                  <div className="px-5 pb-4 flex items-center justify-between border-t pt-3 bg-muted/20">
+                    <p className="text-xs text-muted-foreground">
+                      This report follows the TESDA/NTESDP framework and covers all 9 TNA dimensions.
+                    </p>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
+                      <Download className="w-3.5 h-3.5" />
+                      Export Report
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -330,7 +417,7 @@ export default function AdminReports() {
       </nav>
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">All Reports</h1>
-        <p className="text-muted-foreground text-sm mt-1">View all TNA reports and AI-generated group analysis</p>
+        <p className="text-muted-foreground text-sm mt-1">View all TNA reports and AI-generated TESDA-aligned group analysis</p>
       </div>
 
       {/* Summary Stats */}
@@ -478,14 +565,14 @@ export default function AdminReports() {
                 <div className="flex gap-3">
                   <Brain className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <div className="text-sm">
-                    <p className="font-semibold text-foreground mb-1">AI-Powered Group Analysis</p>
+                    <p className="font-semibold text-foreground mb-1">AI-Powered TESDA/NTESDP Group Analysis</p>
                     <p className="text-muted-foreground leading-relaxed">
-                      Click <strong>"View Analysis"</strong> on any group to generate a comprehensive AI analysis of that cohort's
-                      training needs. The analysis is grounded in established TNA frameworks including the
-                      <strong> Mager &amp; Pipe Performance Analysis Model</strong>, <strong>Boydell's Three-Level TNA</strong>,
-                      <strong> McGhee &amp; Thayer's Needs Assessment</strong>, the <strong>ADDIE instructional design model</strong>,
-                      and the <strong>Philippine TESDA Competency-Based Training framework</strong>. The narrative includes an
-                      executive summary, methodology explanation, group-specific findings, priority recommendations, and conclusion.
+                      Click <strong>"View Analysis"</strong> on any group to generate a comprehensive Training Action Plan
+                      aligned with the <strong>TESDA/NTESDP framework</strong>. The report covers all 9 dimensions:
+                      Industry Profile &amp; Context, Occupational Mapping, Competency Gap Analysis, Skills Categorization (Basic/Common/Core),
+                      Technology &amp; Equipment Requirements, Training Priority Matrix, Training Beneficiaries,
+                      Training Delivery Mode Analysis, and a <strong>Training Plan Output table</strong> with implementation timeline and success metrics.
+                      Use the <strong>Export</strong> button to download the report as a Markdown file, or <strong>Regenerate</strong> to refresh the analysis with the latest data.
                     </p>
                   </div>
                 </div>
