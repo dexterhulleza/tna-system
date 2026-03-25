@@ -105,3 +105,6 @@
 - [x] Frontend: Link configuration to group in Manage Groups
 - [x] Frontend: Show configuration summary in Group Analysis report
 - [x] Navigation: Add breadcrumb to ManageGroups, SurveyHistory, ProfileSetup, AdminReports
+
+## Bug Fixes (Mar 25 2026)
+- [x] Fix: login on published site (tna1.net) redirects to home but user is not logged in (OAuth state encoding mismatch - fixed btoa(JSON.stringify) to btoa(redirectUri))
