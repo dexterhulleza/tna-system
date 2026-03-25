@@ -186,6 +186,8 @@ export const appRouter = router({
           .sort((a, b) => b.frequency - a.frequency || b.avgGapPercentage - a.avgGapPercentage)
           .slice(0, 5);
 
+        // Fetch survey configuration for this group (objectives, business goals, etc.)
+        const surveyConfig = await getSurveyConfig(input.groupId).catch(() => null);
         const statsContext = {
           groupName: group.name,
           groupDescription: group.description,
@@ -195,34 +197,94 @@ export const appRouter = router({
           avgCategoryScores,
           topGaps,
           sectorName: groupReports[0]?.sector?.name ?? "Multiple Sectors",
+          // Survey configuration context
+          surveyTitle: surveyConfig?.surveyTitle ?? null,
+          surveyPurpose: surveyConfig?.surveyPurpose ?? null,
+          surveyObjectives: surveyConfig?.surveyObjectives ?? [],
+          organizationName: surveyConfig?.organizationName ?? null,
+          industryContext: surveyConfig?.industryContext ?? null,
+          businessGoals: surveyConfig?.businessGoals ?? [],
+          targetParticipants: surveyConfig?.targetParticipants ?? null,
+          participantRoles: surveyConfig?.participantRoles ?? [],
+          targetCompetencies: surveyConfig?.targetCompetencies ?? [],
+          knownSkillGaps: surveyConfig?.knownSkillGaps ?? null,
+          priorityAreas: surveyConfig?.priorityAreas ?? [],
+          regulatoryRequirements: surveyConfig?.regulatoryRequirements ?? null,
         };
+        // Generate AI analysis narrative covering all 14 KRA dimensions
+        const prompt = `You are a senior Training Needs Analysis (TNA) expert and organizational development consultant with deep expertise in WorldSkills International competency frameworks, TESDA CBT standards, the ADDIE model, and evidence-based workforce development practices.
 
-        // Generate AI analysis narrative
-        const prompt = `You are an expert in Training Needs Analysis (TNA) for technical and vocational education, with deep knowledge of WorldSkills International competency frameworks, the ADDIE instructional design model, Mager's performance analysis approach, and the Philippine TESDA competency-based training system.
+Analyze the TNA survey data below and produce a comprehensive, structured analytical report for administrators. The report must address ALL of the following 14 Key Result Areas (KRAs), grounding each section in the survey data and the organization's stated objectives:
 
-Analyze the following TNA group data and write a comprehensive analytical narrative for administrators. The narrative must:
+**THEORETICAL FRAMEWORK BASIS:**
+- Mager & Pipe (1984) Performance Analysis Model — distinguishing skill deficiencies from motivational/environmental issues
+- Boydell (1976) Three-Level TNA Model — organizational, job/task, and individual analysis levels
+- McGhee & Thayer (1961) Three-Level Training Needs Assessment — organizational, task, and person analysis
+- ADDIE Instructional Design Model — Analysis phase as the foundation for training design
+- Philippine TESDA Competency-Based Training (CBT) framework — competency standards alignment
+- Kirkpatrick (1994) Four-Level Evaluation Model — for training effectiveness measurement
 
-1. **Executive Summary** (2-3 sentences): Summarize the group's overall training needs profile.
+**REQUIRED REPORT SECTIONS:**
 
-2. **Analysis Methodology**: Explain how the TNA was conducted — the five-category framework (Organizational, Job/Task, Individual, Training Feasibility, Evaluation & Success), the Likert-scale scoring approach, and gap calculation methodology (score vs. maximum possible score expressed as a percentage gap).
+## Executive Summary
+Summarize the group's overall training needs profile in 3-4 sentences, referencing the organization's stated objectives and the most critical gaps found.
 
-3. **Theoretical Basis**: Reference the following frameworks as the basis of the analysis:
-   - Mager & Pipe (1984) Performance Analysis Model — distinguishing skill deficiencies from motivational/environmental issues
-   - Boydell (1976) Three-Level TNA Model — organizational, job/task, and individual analysis levels
-   - McGhee & Thayer (1961) Three-Level Training Needs Assessment — organizational, task, and person analysis
-   - ADDIE Instructional Design Model — Analysis phase as the foundation for training design
-   - Philippine TESDA Competency-Based Training (CBT) framework — competency standards alignment
+## Analysis Methodology
+Explain the TNA methodology: the five-category survey framework (Organizational, Job/Task, Individual, Training Feasibility, Evaluation & Success), Likert-scale scoring, gap calculation method (score vs. maximum possible score as percentage gap), and how the survey configuration objectives shaped the question design.
 
-4. **Group-Specific Findings**: Based on the data below, identify the most critical training gaps, patterns across the group, and category-level insights.
+## KRA 1: Strategic Alignment & Organizational Capability
+Assess how current staff competencies align with the stated strategic priorities and business goals. Identify critical capability gaps relative to organizational direction. Address: alignment of staff competencies with strategic priorities, identification of critical capability gaps, readiness for digital transformation, future skills needed for innovation, succession readiness, and alignment with business expansion plans.
 
-5. **Priority Recommendations**: Suggest 3-5 specific, actionable training interventions with rationale, referencing best practices from the literature.
+## KRA 2: Core Competency Gaps
+Identify technical and professional skill deficiencies. Provide percentage estimates where data supports it. Cover: technical skill gaps by department, professional skills (communication, leadership, project management), digital skills and data literacy, compliance-related competencies, certification or licensing gaps, and skills needed for quality and productivity improvement.
 
-6. **Conclusion**: Summarize the urgency and expected impact of addressing the identified gaps.
+## KRA 3: Job Role Competency Mapping
+Compare required vs. existing competencies. Identify gaps per role, department, and career level (entry, supervisory, managerial). Identify critical roles requiring urgent upskilling.
 
-GROUP DATA:
+## KRA 4: Performance Improvement Needs
+Identify training that directly improves operational output. Reference low-productivity areas, common operational errors, quality issues, process inefficiencies caused by skill gaps, and training required to improve KPIs.
+
+## KRA 5: Future Workforce Planning & Succession
+Assess sustainability of human resources. Identify hard-to-fill positions, skills concentration risks (single-person knowledge), succession pipeline readiness, and leadership development needs.
+
+## KRA 6: Learning & Development Priorities
+Identify preferred training formats (online, blended, face-to-face), training frequency preferences, availability constraints, interest areas for career development, and priority training topics ranked by the data.
+
+## KRA 7: Digital Transformation & Technology Readiness
+Assess workforce readiness for automation, AI-assisted work, digital literacy levels, familiarity with automation tools, cloud-based systems readiness, and ICT competency levels. Note relevance to ERP, LMS, CRM, AI tools, and automation workflows if applicable.
+
+## KRA 8: Leadership and Management Development Needs
+Identify leadership competency gaps, supervisory skills needs, coaching and mentoring capability, conflict management skills, strategic thinking capability, and decision-making capability.
+
+## KRA 9: Compliance, Regulatory, and Policy Training Needs
+Identify mandatory training requirements, health and safety training needs, ethics and governance training needs, industry certification requirements, and regulatory compliance gaps. Include data privacy, occupational safety, procurement compliance, and quality standards where relevant.
+
+## KRA 10: Employee Career Development & Retention Factors
+Assess career pathway clarity, employee aspirations, interest in promotion, training interest areas, willingness to reskill, and job satisfaction related to skills development.
+
+## KRA 11: Department-Level Training Demand Analysis
+Identify priority departments for intervention, departments requiring specialized technical training, departments requiring process improvement training, and training needs based on operational complexity.
+
+## KRA 12: Training Investment Prioritization
+Provide a prioritization matrix (Urgent vs. Important), identify high-impact training areas, cost-benefit considerations, quick-win training interventions, and long-term capability building programs.
+
+## KRA 13: Risk Areas Affecting Operations
+Identify skills gaps affecting business continuity, dependency on single employees, knowledge loss risk, technology transition risk, and compliance risk areas.
+
+## KRA 14: Innovation and Future Skills Readiness
+Assess AI literacy levels, innovation capability, problem-solving capability, creativity, adaptability to new technology, and cross-functional collaboration capability.
+
+## Priority Training Recommendations
+Provide 5-7 specific, actionable training interventions with rationale, suggested timeline (short/medium/long-term), and expected impact. Align each recommendation with the organization's stated business goals and priority areas.
+
+## Conclusion
+Summarize the urgency and expected organizational impact of addressing the identified gaps, referencing the stated objectives and the theoretical frameworks applied.
+
+---
+SURVEY DATA:
 ${JSON.stringify(statsContext, null, 2)}
 
-Write in a professional, academic tone suitable for a government or institutional training report. Use specific numbers from the data. Format with clear headings using markdown.`;
+Write in a professional, academic tone suitable for a government or institutional training report. Use specific numbers and percentages from the data wherever possible. Where data is insufficient for a specific KRA, note what additional data collection would be needed. Format with clear markdown headings.`
 
         let aiAnalysis: string | null = null;
         try {

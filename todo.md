@@ -111,3 +111,11 @@
 
 ## Bug Fixes (Mar 25 2026 - cont.)
 - [x] Fix: AI-generated questions from Survey Configuration not appearing in actual survey (added addToQuestionBank procedure that inserts accepted questions into the questions table)
+
+## Enhanced Report Generation (Mar 25 2026)
+- [ ] Backend: update AI group analysis prompt to cover all 14 KRA dimensions (Strategic Alignment, Core Competency Gaps, Job Role Mapping, Performance Improvement, Workforce Planning, L&D Priorities, Digital Transformation, Leadership, Compliance, Career Development, Department Analysis, Training Investment, Risk Areas, Innovation Readiness)
+- [ ] Backend: include survey configuration objectives and company goals in the analysis prompt context
+- [ ] Backend: return structured JSON analysis with per-KRA sections, metrics, and recommendations
+- [ ] Frontend: render full 14-KRA report in Group Analysis tab with collapsible sections
+- [ ] Frontend: show executive summary, KRA breakdown, priority matrix, and training investment recommendations
+- [ ] Frontend: include survey config objectives and business goals in the report header context

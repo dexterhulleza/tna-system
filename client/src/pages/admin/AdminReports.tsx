@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Search, FileText, Loader2, BarChart3, User, Filter, Tag, Brain, ChevronDown, ChevronUp, Users, TrendingDown, AlertTriangle, BookOpen, Home, LayoutDashboard, ChevronRight } from "lucide-react";
+import { Search, FileText, Loader2, BarChart3, User, Filter, Tag, Brain, ChevronDown, ChevronUp, Users, TrendingDown, AlertTriangle, BookOpen, Home, LayoutDashboard, ChevronRight, Target, Building2, ListChecks } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 const GAP_LEVEL_CONFIG: Record<string, { color: string; label: string }> = {
@@ -75,6 +75,61 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Survey Configuration Context */}
+              {((data.stats as any)?.surveyTitle || (data.stats as any)?.surveyPurpose || ((data.stats as any)?.surveyObjectives?.length > 0) || (data.stats as any)?.organizationName) && (
+                <div className="border rounded-xl p-4 bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                  <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3 flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    Survey Configuration & Objectives
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    {(data.stats as any)?.surveyTitle && (
+                      <div><span className="font-medium text-foreground">Survey Title:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).surveyTitle}</span></div>
+                    )}
+                    {(data.stats as any)?.organizationName && (
+                      <div className="flex items-start gap-1.5"><Building2 className="w-3.5 h-3.5 mt-0.5 text-muted-foreground shrink-0" /><span className="font-medium text-foreground">Organization:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).organizationName}</span></div>
+                    )}
+                    {(data.stats as any)?.industryContext && (
+                      <div><span className="font-medium text-foreground">Industry:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).industryContext}</span></div>
+                    )}
+                    {(data.stats as any)?.surveyPurpose && (
+                      <div><span className="font-medium text-foreground">Purpose:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).surveyPurpose}</span></div>
+                    )}
+                    {((data.stats as any)?.surveyObjectives?.length > 0) && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1"><ListChecks className="w-3.5 h-3.5 text-muted-foreground" /><span className="font-medium text-foreground">Survey Objectives:</span></div>
+                        <ul className="ml-5 list-disc space-y-0.5">
+                          {((data.stats as any).surveyObjectives as string[]).map((obj: string, i: number) => (
+                            <li key={i} className="text-muted-foreground">{obj}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {((data.stats as any)?.businessGoals?.length > 0) && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1"><Target className="w-3.5 h-3.5 text-muted-foreground" /><span className="font-medium text-foreground">Business Goals:</span></div>
+                        <ul className="ml-5 list-disc space-y-0.5">
+                          {((data.stats as any).businessGoals as string[]).map((goal: string, i: number) => (
+                            <li key={i} className="text-muted-foreground">{goal}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {((data.stats as any)?.priorityAreas?.length > 0) && (
+                      <div><span className="font-medium text-foreground">Priority Areas:</span> <span className="text-muted-foreground ml-1">{((data.stats as any).priorityAreas as string[]).join(", ")}</span></div>
+                    )}
+                    {(data.stats as any)?.targetParticipants && (
+                      <div><span className="font-medium text-foreground">Target Participants:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).targetParticipants}</span></div>
+                    )}
+                    {(data.stats as any)?.knownSkillGaps && (
+                      <div><span className="font-medium text-foreground">Known Skill Gaps:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).knownSkillGaps}</span></div>
+                    )}
+                    {(data.stats as any)?.regulatoryRequirements && (
+                      <div><span className="font-medium text-foreground">Regulatory Requirements:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).regulatoryRequirements}</span></div>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Quick Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-muted/40 rounded-lg p-3 text-center">
