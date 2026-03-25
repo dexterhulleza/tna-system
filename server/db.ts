@@ -4,6 +4,7 @@ import {
   InsertUser,
   adminPermissions,
   aiSettings,
+  groupAnalysisSections,
   questions,
   recommendations,
   reports,
@@ -796,4 +797,195 @@ export async function upsertAiSettings(data: {
       updatedBy: data.updatedBy,
     });
   }
+}
+
+// ─── Group Analysis Sections ──────────────────────────────────────────────────
+export async function getGroupAnalysisSections(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(groupAnalysisSections)
+    .where(eq(groupAnalysisSections.groupId, groupId))
+    .orderBy(groupAnalysisSections.sectionKey);
+}
+
+export async function getGroupAnalysisSection(groupId: number, sectionKey: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(groupAnalysisSections)
+    .where(
+      and(
+        eq(groupAnalysisSections.groupId, groupId),
+        eq(groupAnalysisSections.sectionKey, sectionKey)
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertGroupAnalysisSection(data: {
+  groupId: number;
+  sectionKey: string;
+  sectionTitle: string;
+  content: string;
+  modelUsed?: string | null;
+  generatedBy?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await getGroupAnalysisSection(data.groupId, data.sectionKey);
+  if (existing) {
+    await db
+      .update(groupAnalysisSections)
+      .set({
+        sectionTitle: data.sectionTitle,
+        content: data.content,
+        modelUsed: data.modelUsed ?? null,
+        generatedBy: data.generatedBy ?? null,
+      })
+      .where(eq(groupAnalysisSections.id, existing.id));
+  } else {
+    await db.insert(groupAnalysisSections).values({
+      groupId: data.groupId,
+      sectionKey: data.sectionKey,
+      sectionTitle: data.sectionTitle,
+      content: data.content,
+      modelUsed: data.modelUsed ?? null,
+      generatedBy: data.generatedBy ?? null,
+    });
+  }
+}
+
+export async function deleteGroupAnalysisSection(groupId: number, sectionKey: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(groupAnalysisSections)
+    .where(
+      and(
+        eq(groupAnalysisSections.groupId, groupId),
+        eq(groupAnalysisSections.sectionKey, sectionKey)
+      )
+    );
+}
+
+/**
+ * Compute a free (no-AI) group summary by aggregating individual report data.
+ * Returns rich statistics coherent with individual reports in the group.
+ */
+export async function computeGroupSummary(groupId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const groupReports = await getReportsByGroup(groupId);
+  if (groupReports.length === 0) return null;
+
+  const scores = groupReports.map((r) => r.report.overallScore ?? 0);
+  const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  const minScore = Math.min(...scores);
+  const maxScore = Math.max(...scores);
+
+  // Score distribution buckets
+  const scoreDistribution = {
+    "0-20": scores.filter((s) => s <= 20).length,
+    "21-40": scores.filter((s) => s > 20 && s <= 40).length,
+    "41-60": scores.filter((s) => s > 40 && s <= 60).length,
+    "61-80": scores.filter((s) => s > 60 && s <= 80).length,
+    "81-100": scores.filter((s) => s > 80).length,
+  };
+
+  // Gap level distribution
+  const gapLevels = groupReports.map((r) => r.report.gapLevel ?? "none");
+  const gapDistribution = gapLevels.reduce<Record<string, number>>((acc, g) => {
+    acc[g] = (acc[g] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  // Category scores aggregation
+  const categoryTotals: Record<string, { sum: number; count: number; scores: number[] }> = {};
+  for (const r of groupReports) {
+    const cs = r.report.categoryScores as Record<string, number> | null;
+    if (cs) {
+      for (const [cat, score] of Object.entries(cs)) {
+        if (!categoryTotals[cat]) categoryTotals[cat] = { sum: 0, count: 0, scores: [] };
+        categoryTotals[cat].sum += score;
+        categoryTotals[cat].count += 1;
+        categoryTotals[cat].scores.push(score);
+      }
+    }
+  }
+  const avgCategoryScores = Object.fromEntries(
+    Object.entries(categoryTotals).map(([cat, { sum, count }]) => [cat, Math.round(sum / count)])
+  );
+  // Weakest categories (below 60%)
+  const weakCategories = Object.entries(avgCategoryScores)
+    .filter(([, score]) => score < 60)
+    .sort(([, a], [, b]) => a - b)
+    .map(([cat, score]) => ({ category: cat, avgScore: score }));
+
+  // Top gaps across all individuals
+  const allGaps: Array<{ category: string; questionText: string; gapPercentage: number }> = [];
+  for (const r of groupReports) {
+    const gaps = r.report.identifiedGaps as any[] | null;
+    if (gaps) {
+      allGaps.push(
+        ...gaps.map((g: any) => ({
+          category: g.category,
+          questionText: g.questionText,
+          gapPercentage: g.gapPercentage,
+        }))
+      );
+    }
+  }
+  const gapFrequency: Record<string, { count: number; category: string; totalGap: number }> = {};
+  for (const gap of allGaps) {
+    const key = gap.questionText;
+    if (!gapFrequency[key]) gapFrequency[key] = { count: 0, category: gap.category, totalGap: 0 };
+    gapFrequency[key].count += 1;
+    gapFrequency[key].totalGap += gap.gapPercentage;
+  }
+  const topGaps = Object.entries(gapFrequency)
+    .map(([text, data]) => ({
+      questionText: text,
+      category: data.category,
+      affectedCount: data.count,
+      affectedPct: Math.round((data.count / groupReports.length) * 100),
+      avgGapPct: Math.round(data.totalGap / data.count),
+    }))
+    .sort((a, b) => b.affectedCount - a.affectedCount || b.avgGapPct - a.avgGapPct)
+    .slice(0, 10);
+
+  // Individual respondent summary (anonymized for group view)
+  const respondentSummaries = groupReports.map((r) => ({
+    name: r.user?.name ?? "Anonymous",
+    overallScore: r.report.overallScore ?? 0,
+    gapLevel: r.report.gapLevel ?? "none",
+    sector: r.sector?.name ?? "Unknown",
+    completedAt: r.report.createdAt,
+  }));
+
+  // Sector distribution
+  const sectorCounts: Record<string, number> = {};
+  for (const r of groupReports) {
+    const s = r.sector?.name ?? "Unknown";
+    sectorCounts[s] = (sectorCounts[s] ?? 0) + 1;
+  }
+
+  return {
+    totalRespondents: groupReports.length,
+    avgScore,
+    minScore,
+    maxScore,
+    scoreDistribution,
+    gapDistribution,
+    avgCategoryScores,
+    weakCategories,
+    topGaps,
+    respondentSummaries,
+    sectorDistribution: sectorCounts,
+    primarySector: groupReports[0]?.sector?.name ?? "Multiple Sectors",
+  };
 }

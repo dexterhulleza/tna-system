@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Search, FileText, Loader2, BarChart3, User, Filter, Tag, Brain, ChevronDown, ChevronUp, Users, TrendingDown, AlertTriangle, Home, LayoutDashboard, ChevronRight, Target, Building2, ListChecks, RefreshCw, Download, Clock } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Search, FileText, Loader2, BarChart3, User, Filter, Tag, Brain,
+  ChevronDown, ChevronUp, Users, TrendingDown, AlertTriangle, Home,
+  LayoutDashboard, ChevronRight, Target, Building2, ListChecks,
+  RefreshCw, Download, CheckCircle2, Sparkles, Lock, Zap,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 const GAP_LEVEL_CONFIG: Record<string, { color: string; label: string }> = {
@@ -18,39 +24,226 @@ const GAP_LEVEL_CONFIG: Record<string, { color: string; label: string }> = {
   none: { color: "bg-gray-100 text-gray-700 border-gray-200", label: "None" },
 };
 
+const SECTIONS = [
+  { key: "industry_profile",       title: "Industry Profile & Context",          icon: "🏭", description: "Industry direction, future skills demand, regulatory context" },
+  { key: "occupational_mapping",   title: "Occupational Mapping",                icon: "🗺️", description: "Priority job roles, competency requirements, TESDA qualifications" },
+  { key: "competency_gap",         title: "Competency Gap Analysis",             icon: "📊", description: "Current vs. required competencies, gap severity, root causes" },
+  { key: "skills_categorization",  title: "Skills Categorization",               icon: "🏷️", description: "Basic, Common, Core & Cross-Cutting competencies per TESDA framework" },
+  { key: "technology_equipment",   title: "Technology & Equipment Requirements", icon: "⚙️", description: "Equipment needed for training delivery, digital infrastructure" },
+  { key: "priority_matrix",        title: "Training Priority Matrix",            icon: "🎯", description: "Urgency × workers affected × economic impact × NTESDP alignment" },
+  { key: "training_beneficiaries", title: "Training Beneficiaries",              icon: "👥", description: "New entrants, upskilling, reskilling, supervisors, trainers, partners" },
+  { key: "delivery_mode",          title: "Training Delivery Mode Analysis",     icon: "📚", description: "Face-to-face, online, blended, OJT, CBT per TESDA standards" },
+  { key: "training_plan",          title: "Training Plan Output",                icon: "📋", description: "Final plan table: program, target group, duration, mode, partner, outcome" },
+] as const;
+
+type SectionKey = typeof SECTIONS[number]["key"];
+
+// ─── Markdown Prose Styles ─────────────────────────────────────────────────────
+const PROSE_CLASSES = `
+  prose prose-sm max-w-none text-foreground
+  [&_h2]:font-bold [&_h2]:text-[0.95rem] [&_h2]:mt-7 [&_h2]:mb-3
+  [&_h2]:pb-2 [&_h2]:border-b [&_h2]:border-border
+  [&_h2]:text-foreground [&_h2:first-child]:mt-0
+  [&_h3]:font-semibold [&_h3]:text-sm [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-foreground
+  [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-foreground/90 [&_p]:mb-3
+  [&_ul]:text-sm [&_ul]:space-y-1.5 [&_ul]:my-2 [&_ul]:pl-5 [&_ul]:list-disc
+  [&_ol]:text-sm [&_ol]:space-y-1.5 [&_ol]:my-2 [&_ol]:pl-5 [&_ol]:list-decimal
+  [&_li]:text-foreground/90 [&_li]:leading-relaxed
+  [&_strong]:font-semibold [&_strong]:text-foreground
+  [&_blockquote]:border-l-4 [&_blockquote]:border-primary/40 [&_blockquote]:pl-4 [&_blockquote]:py-1
+  [&_blockquote]:text-muted-foreground [&_blockquote]:italic [&_blockquote]:my-3
+  [&_table]:text-xs [&_table]:w-full [&_table]:my-3 [&_table]:border-collapse
+  [&_th]:text-left [&_th]:font-semibold [&_th]:pb-2 [&_th]:border-b [&_th]:border-border [&_th]:pr-4 [&_th]:py-2
+  [&_td]:py-1.5 [&_td]:border-b [&_td]:border-border/50 [&_td]:pr-4
+  [&_hr]:border-border [&_hr]:my-4
+`.trim();
+
+// ─── Single Section Card ───────────────────────────────────────────────────────
+function SectionCard({
+  sectionDef,
+  groupId,
+  cachedContent,
+  cachedModel,
+  cachedAt,
+  onGenerated,
+}: {
+  sectionDef: typeof SECTIONS[number];
+  groupId: number;
+  cachedContent?: string;
+  cachedModel?: string | null;
+  cachedAt?: Date | string | null;
+  onGenerated: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const utils = trpc.useUtils();
+
+  const generateMutation = trpc.groups.generateSection.useMutation({
+    onSuccess: (data) => {
+      if (data.fromCache) {
+        toast.info(`Section loaded from cache (${data.section.modelUsed ?? "built-in"})`);
+      } else {
+        toast.success(`Section generated successfully`);
+      }
+      onGenerated();
+      setExpanded(true);
+    },
+    onError: (err) => {
+      toast.error(`Generation failed: ${err.message}`);
+    },
+  });
+
+  const handleGenerate = (forceRegenerate = false) => {
+    generateMutation.mutate({ groupId, sectionKey: sectionDef.key, forceRegenerate });
+  };
+
+  const handleExportSection = () => {
+    if (!cachedContent) return;
+    const content = `# ${sectionDef.title}\n\n${cachedContent}`;
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `TNA_${sectionDef.key}_${new Date().toISOString().split("T")[0]}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const isGenerating = generateMutation.isPending;
+  const hasContent = !!cachedContent;
+
+  return (
+    <div className={`border rounded-xl overflow-hidden transition-all ${hasContent ? "border-primary/20 bg-primary/2" : "border-border"}`}>
+      {/* Section Header */}
+      <div className="flex items-center justify-between gap-3 p-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-xl shrink-0">{sectionDef.icon}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-foreground">{sectionDef.title}</p>
+              {hasContent && (
+                <Badge className="text-xs bg-green-50 text-green-700 border-green-200 gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Generated
+                </Badge>
+              )}
+              {!hasContent && (
+                <Badge variant="outline" className="text-xs text-muted-foreground gap-1">
+                  <Lock className="w-3 h-3" />
+                  Not generated
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5 hidden sm:block">{sectionDef.description}</p>
+            {hasContent && cachedAt && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Last generated: {new Date(cachedAt).toLocaleString()}
+                {cachedModel && <span className="ml-1 text-primary/70">· {cachedModel}</span>}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {hasContent && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={handleExportSection}
+                title="Export section as Markdown"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-xs">Export</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={() => handleGenerate(true)}
+                disabled={isGenerating}
+                title="Regenerate this section (uses AI credits)"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline text-xs">Regenerate</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setExpanded((e) => !e)}
+                className="gap-1"
+              >
+                {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            </>
+          )}
+          {!hasContent && (
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleGenerate(false)}
+              disabled={isGenerating}
+            >
+              {isGenerating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              {isGenerating ? "Generating…" : "Generate"}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Generating indicator */}
+      {isGenerating && (
+        <div className="px-4 pb-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+            <span>AI is generating this section… this may take 20–40 seconds.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded content */}
+      {expanded && hasContent && (
+        <div className="border-t px-5 py-4">
+          <div className={PROSE_CLASSES}>
+            <ReactMarkdown>{cachedContent!}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Group Analysis Card ───────────────────────────────────────────────────────
 function GroupAnalysisCard({ group }: { group: { id: number; name: string; code: string; description: string | null } }) {
   const [expanded, setExpanded] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [lastGenerated, setLastGenerated] = useState<Date | null>(null);
   const [, navigate] = useLocation();
-  const prevDataRef = useRef<any>(undefined);
+  const utils = trpc.useUtils();
 
-  const { data, isLoading, error } = trpc.groups.groupAnalysis.useQuery(
+  const { data, isLoading, error, refetch } = trpc.groups.groupSummary.useQuery(
     { groupId: group.id },
-    {
-      enabled: expanded,
-      staleTime: refreshKey === 0 ? 5 * 60 * 1000 : 0,
-    }
+    { enabled: expanded, staleTime: 60 * 1000 }
   );
 
-  useEffect(() => {
-    if (data && data !== prevDataRef.current && data.analysis) {
-      setLastGenerated(new Date());
-      prevDataRef.current = data;
+  const handleSectionGenerated = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const handleExportAll = () => {
+    if (!data?.sections || data.sections.length === 0) {
+      toast.info("No sections generated yet. Generate at least one section first.");
+      return;
     }
-  }, [data]);
-
-  const handleRegenerate = () => {
-    setRefreshKey((k) => k + 1);
-    prevDataRef.current = undefined;
-  };
-
-  const handleExport = () => {
-    if (!data?.analysis) return;
     const header = `# TESDA Training Needs Analysis Report\n## Group: ${group.name} (${group.code})\n### Generated: ${new Date().toLocaleString()}\n\n---\n\n`;
-    const content = header + data.analysis;
-    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const body = data.sections
+      .sort((a, b) => a.sectionKey.localeCompare(b.sectionKey))
+      .map((s) => `## ${s.sectionTitle}\n\n${s.content}`)
+      .join("\n\n---\n\n");
+    const blob = new Blob([header + body], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -60,6 +253,9 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  const generatedCount = data?.sections?.length ?? 0;
+  const totalSections = SECTIONS.length;
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -71,39 +267,31 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
             </div>
             <div>
               <CardTitle className="font-display text-base">{group.name}</CardTitle>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <Badge variant="outline" className="text-xs">{group.code}</Badge>
                 {group.description && (
                   <span className="text-xs text-muted-foreground">{group.description}</span>
                 )}
+                {expanded && generatedCount > 0 && (
+                  <Badge className="text-xs bg-green-50 text-green-700 border-green-200">
+                    {generatedCount}/{totalSections} sections generated
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {expanded && data?.analysis && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-muted-foreground hover:text-foreground"
-                  onClick={handleExport}
-                  title="Export as Markdown"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Export</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-muted-foreground hover:text-foreground"
-                  onClick={handleRegenerate}
-                  disabled={isLoading}
-                  title="Regenerate analysis"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-                  <span className="hidden sm:inline">Regenerate</span>
-                </Button>
-              </>
+          <div className="flex items-center gap-2 shrink-0">
+            {expanded && generatedCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={handleExportAll}
+                title="Export all generated sections as Markdown"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Export All</span>
+              </Button>
             )}
             <Button
               variant="outline"
@@ -112,7 +300,7 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
               onClick={() => setExpanded((e) => !e)}
             >
               <Brain className="w-3.5 h-3.5 text-primary" />
-              {expanded ? "Hide Analysis" : "View Analysis"}
+              {expanded ? "Hide" : "View Analysis"}
               {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </Button>
           </div>
@@ -124,21 +312,17 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
           {isLoading ? (
             <div className="flex flex-col items-center gap-3 py-10 justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <div className="text-center">
-                <p className="text-sm font-medium text-foreground">Generating TESDA-aligned analysis...</p>
-                <p className="text-xs text-muted-foreground mt-1">This may take 30–60 seconds. The AI is analyzing all 9 framework dimensions.</p>
-              </div>
+              <p className="text-sm text-muted-foreground">Loading group summary…</p>
             </div>
           ) : error ? (
             <div className="py-4 px-4 bg-destructive/5 rounded-lg border border-destructive/20 space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-destructive">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>Failed to load analysis</span>
+                <span>Failed to load group data</span>
               </div>
-              <p className="text-xs text-muted-foreground">{error.message || "An unexpected error occurred."}</p>
-              <p className="text-xs text-muted-foreground">If you are using Gemini, your API quota may be exhausted. Go to <strong>Admin → AI Settings</strong> to check your configuration or switch to a different provider. Then click <strong>Regenerate</strong> to retry.</p>
+              <p className="text-xs text-muted-foreground">{error.message}</p>
             </div>
-          ) : !data ? null : data.reports.length === 0 ? (
+          ) : !data || !data.summary ? (
             <div className="py-8 text-center">
               <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm font-medium text-foreground">No completed surveys in this group yet.</p>
@@ -146,242 +330,176 @@ function GroupAnalysisCard({ group }: { group: { id: number; name: string; code:
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Survey Configuration Context */}
-              {((data.stats as any)?.surveyTitle || (data.stats as any)?.surveyPurpose || ((data.stats as any)?.surveyObjectives?.length > 0) || (data.stats as any)?.organizationName) && (
-                <div className="border rounded-xl p-4 bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-                  <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3 flex items-center gap-2">
-                    <Target className="w-4 h-4" />
-                    Survey Configuration &amp; Objectives
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    {(data.stats as any)?.surveyTitle && (
-                      <div><span className="font-medium text-foreground">Survey Title:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).surveyTitle}</span></div>
-                    )}
-                    {(data.stats as any)?.organizationName && (
-                      <div className="flex items-start gap-1.5"><Building2 className="w-3.5 h-3.5 mt-0.5 text-muted-foreground shrink-0" /><span className="font-medium text-foreground">Organization:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).organizationName}</span></div>
-                    )}
-                    {(data.stats as any)?.industryContext && (
-                      <div><span className="font-medium text-foreground">Industry:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).industryContext}</span></div>
-                    )}
-                    {(data.stats as any)?.surveyPurpose && (
-                      <div><span className="font-medium text-foreground">Purpose:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).surveyPurpose}</span></div>
-                    )}
-                    {((data.stats as any)?.surveyObjectives?.length > 0) && (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-1"><ListChecks className="w-3.5 h-3.5 text-muted-foreground" /><span className="font-medium text-foreground">Survey Objectives:</span></div>
-                        <ul className="ml-5 list-disc space-y-0.5">
-                          {((data.stats as any).surveyObjectives as string[]).map((obj: string, i: number) => (
-                            <li key={i} className="text-muted-foreground">{obj}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {((data.stats as any)?.businessGoals?.length > 0) && (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-1"><Target className="w-3.5 h-3.5 text-muted-foreground" /><span className="font-medium text-foreground">Business Goals:</span></div>
-                        <ul className="ml-5 list-disc space-y-0.5">
-                          {((data.stats as any).businessGoals as string[]).map((goal: string, i: number) => (
-                            <li key={i} className="text-muted-foreground">{goal}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {((data.stats as any)?.priorityAreas?.length > 0) && (
-                      <div><span className="font-medium text-foreground">Priority Areas:</span> <span className="text-muted-foreground ml-1">{((data.stats as any).priorityAreas as string[]).join(", ")}</span></div>
-                    )}
-                    {(data.stats as any)?.targetParticipants && (
-                      <div><span className="font-medium text-foreground">Target Participants:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).targetParticipants}</span></div>
-                    )}
-                    {(data.stats as any)?.knownSkillGaps && (
-                      <div><span className="font-medium text-foreground">Known Skill Gaps:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).knownSkillGaps}</span></div>
-                    )}
-                    {(data.stats as any)?.regulatoryRequirements && (
-                      <div><span className="font-medium text-foreground">Regulatory Requirements:</span> <span className="text-muted-foreground ml-1">{(data.stats as any).regulatoryRequirements}</span></div>
-                    )}
+
+              {/* ── Free Summary Dashboard ──────────────────────────────────── */}
+              <div className="rounded-xl border bg-muted/20 p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <h4 className="text-sm font-semibold text-foreground">Group Summary Dashboard</h4>
+                  <Badge variant="secondary" className="text-xs ml-auto">Free · No AI credits</Badge>
+                </div>
+
+                {/* Key Metrics */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-background rounded-lg p-3 text-center border">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Respondents</p>
+                    <p className="text-xl font-bold font-display text-foreground mt-1">{data.summary.totalRespondents}</p>
+                  </div>
+                  <div className="bg-background rounded-lg p-3 text-center border">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Avg. Score</p>
+                    <p className="text-xl font-bold font-display text-foreground mt-1">{data.summary.avgScore}%</p>
+                  </div>
+                  <div className="bg-background rounded-lg p-3 text-center border">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Critical Gap</p>
+                    <p className="text-xl font-bold font-display text-red-600 mt-1">{data.summary.gapDistribution?.["critical"] ?? 0}</p>
+                  </div>
+                  <div className="bg-background rounded-lg p-3 text-center border">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">High Gap</p>
+                    <p className="text-xl font-bold font-display text-orange-600 mt-1">{data.summary.gapDistribution?.["high"] ?? 0}</p>
                   </div>
                 </div>
-              )}
 
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-muted/40 rounded-lg p-3 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Respondents</p>
-                  <p className="text-xl font-bold font-display text-foreground mt-1">{data.stats?.totalRespondents ?? 0}</p>
-                </div>
-                <div className="bg-muted/40 rounded-lg p-3 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Avg. Score</p>
-                  <p className="text-xl font-bold font-display text-foreground mt-1">{data.stats?.averageScore ?? 0}%</p>
-                </div>
-                <div className="bg-muted/40 rounded-lg p-3 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Critical Gap</p>
-                  <p className="text-xl font-bold font-display text-red-600 mt-1">{(data.stats?.gapDistribution as any)?.["critical"] ?? 0}</p>
-                </div>
-                <div className="bg-muted/40 rounded-lg p-3 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">High Gap</p>
-                  <p className="text-xl font-bold font-display text-orange-600 mt-1">{(data.stats?.gapDistribution as any)?.["high"] ?? 0}</p>
-                </div>
-              </div>
-
-              {/* Top Gaps */}
-              {(data.stats?.topGaps?.length ?? 0) > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                    <TrendingDown className="w-4 h-4 text-red-500" />
-                    Most Common Training Gaps
-                  </h4>
-                  <div className="space-y-2">
-                    {(data.stats?.topGaps ?? []).map((gap: any, i: number) => (
-                      <div key={i} className="flex items-center gap-3 text-sm">
-                        <span className="w-5 h-5 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold shrink-0">
-                          {i + 1}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-foreground truncate">{gap.questionText}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{gap.category.replace(/_/g, " ")}</p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-xs font-semibold text-red-600">{gap.avgGapPercentage}% gap</p>
-                          <p className="text-xs text-muted-foreground">{gap.frequency} respondents</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Category Scores */}
-              {Object.keys(data.stats?.avgCategoryScores ?? {}).length > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                    <BarChart3 className="w-4 h-4 text-primary" />
-                    Average Category Scores
-                  </h4>
-                  <div className="space-y-2">
-                    {Object.entries(data.stats?.avgCategoryScores ?? {}).map(([cat, score]) => (
-                      <div key={cat} className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground w-40 shrink-0 capitalize">{cat.replace(/_/g, " ")}</span>
-                        <div className="flex-1 bg-muted rounded-full h-2">
+                {/* Score Distribution */}
+                {data.summary.scoreDistribution && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Score Distribution</p>
+                    <div className="flex gap-1 h-8 rounded overflow-hidden">
+                      {Object.entries(data.summary.scoreDistribution).map(([range, count]) => {
+                        const pct = data.summary!.totalRespondents > 0
+                          ? Math.round((count as number / data.summary!.totalRespondents) * 100)
+                          : 0;
+                        if (pct === 0) return null;
+                        const colors: Record<string, string> = {
+                          "0-20": "bg-red-400", "21-40": "bg-orange-400",
+                          "41-60": "bg-yellow-400", "61-80": "bg-blue-400", "81-100": "bg-green-400",
+                        };
+                        return (
                           <div
-                            className="h-2 rounded-full bg-primary transition-all"
-                            style={{ width: `${Math.min(score as number, 100)}%` }}
-                          />
+                            key={range}
+                            className={`${colors[range] ?? "bg-muted"} flex items-center justify-center text-white text-xs font-semibold transition-all`}
+                            style={{ width: `${pct}%` }}
+                            title={`${range}%: ${count} respondents`}
+                          >
+                            {pct >= 10 ? `${range}` : ""}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-3 mt-1 flex-wrap">
+                      {Object.entries(data.summary.scoreDistribution).map(([range, count]) => (
+                        <span key={range} className="text-xs text-muted-foreground">{range}%: <strong>{count as number}</strong></span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Category Scores */}
+                {Object.keys(data.summary.avgCategoryScores ?? {}).length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Average Category Scores</p>
+                    <div className="space-y-1.5">
+                      {Object.entries(data.summary.avgCategoryScores).map(([cat, score]) => (
+                        <div key={cat} className="flex items-center gap-3">
+                          <span className="text-xs text-muted-foreground w-40 shrink-0 capitalize">{cat.replace(/_/g, " ")}</span>
+                          <div className="flex-1 bg-muted rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${(score as number) < 40 ? "bg-red-500" : (score as number) < 60 ? "bg-orange-400" : (score as number) < 80 ? "bg-blue-500" : "bg-green-500"}`}
+                              style={{ width: `${Math.min(score as number, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold text-foreground w-10 text-right">{score as number}%</span>
                         </div>
-                        <span className="text-xs font-semibold text-foreground w-10 text-right">{score as number}%</span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* TESDA-Aligned Training Action Plan */}
-              {data.analysis ? (
-                <div className="border rounded-xl overflow-hidden">
-                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-5 py-3 border-b flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Brain className="w-4 h-4 text-primary shrink-0" />
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-semibold text-foreground">TESDA-Aligned Training Action Plan</h4>
-                        <p className="text-xs text-muted-foreground hidden sm:block">AI-generated · TESDA/NTESDP framework · 9-section structured analysis</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {lastGenerated && (
-                        <span className="text-xs text-muted-foreground items-center gap-1 hidden sm:flex">
-                          <Clock className="w-3 h-3" />
-                          {lastGenerated.toLocaleTimeString()}
-                        </span>
-                      )}
-                      <Badge variant="secondary" className="text-xs">AI-Generated</Badge>
-                    </div>
-                  </div>
-                  <div className="p-5">
-                    <div className="
-                      prose prose-sm max-w-none
-                      text-foreground
-                      [&_h2]:font-bold [&_h2]:text-[0.95rem] [&_h2]:mt-7 [&_h2]:mb-3
-                      [&_h2]:pb-2 [&_h2]:border-b [&_h2]:border-border
-                      [&_h2]:text-foreground [&_h2:first-child]:mt-0
-                      [&_h3]:font-semibold [&_h3]:text-sm [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-foreground
-                      [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-foreground/90 [&_p]:mb-3
-                      [&_ul]:text-sm [&_ul]:space-y-1.5 [&_ul]:my-2 [&_ul]:pl-5 [&_ul]:list-disc
-                      [&_ol]:text-sm [&_ol]:space-y-1.5 [&_ol]:my-2 [&_ol]:pl-5 [&_ol]:list-decimal
-                      [&_li]:text-foreground/90 [&_li]:leading-relaxed
-                      [&_strong]:font-semibold [&_strong]:text-foreground
-                      [&_blockquote]:border-l-4 [&_blockquote]:border-primary/40 [&_blockquote]:pl-4 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_blockquote]:italic [&_blockquote]:my-3
-                      [&_table]:text-xs [&_table]:w-full [&_table]:my-3 [&_table]:border-collapse
-                      [&_th]:text-left [&_th]:font-semibold [&_th]:pb-2 [&_th]:border-b [&_th]:border-border [&_th]:pr-4 [&_th]:py-2
-                      [&_td]:py-1.5 [&_td]:border-b [&_td]:border-border/50 [&_td]:pr-4
-                      [&_hr]:border-border [&_hr]:my-4
-                    ">
-                      <ReactMarkdown>{data.analysis}</ReactMarkdown>
-                    </div>
-                  </div>
-                  <div className="px-5 pb-4 flex items-center justify-between border-t pt-3 bg-muted/20">
-                    <p className="text-xs text-muted-foreground">
-                      This report follows the TESDA/NTESDP framework and covers all 9 TNA dimensions.
+                {/* Top Gaps */}
+                {(data.summary.topGaps?.length ?? 0) > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                      <TrendingDown className="w-3.5 h-3.5 inline mr-1 text-red-500" />
+                      Most Common Training Gaps
                     </p>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
-                      <Download className="w-3.5 h-3.5" />
-                      Export Report
-                    </Button>
+                    <div className="space-y-1.5">
+                      {data.summary.topGaps.slice(0, 5).map((gap, i) => (
+                        <div key={i} className="flex items-center gap-3 text-sm">
+                          <span className="w-5 h-5 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-foreground text-xs truncate">{gap.questionText}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{gap.category?.replace(/_/g, " ")}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs font-semibold text-red-600">{gap.avgGapPct}% gap</p>
+                            <p className="text-xs text-muted-foreground">{gap.affectedCount} ({gap.affectedPct}%)</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="border rounded-xl p-5 bg-amber-500/5 border border-amber-500/20 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className="text-sm font-medium text-foreground">AI analysis could not be generated</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground">The AI provider encountered an error while generating the analysis. This may be due to API quota limits, a temporary service outage, or a configuration issue.</p>
-                  <p className="text-xs text-muted-foreground">Go to <strong>Admin → AI Settings</strong> to verify your AI provider configuration, or click <strong>Regenerate</strong> to try again.</p>
-                  <Button variant="outline" size="sm" className="gap-1.5 mt-1" onClick={handleRegenerate} disabled={isLoading}>
-                    <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-                    Try Again
-                  </Button>
-                </div>
-              )}
+                )}
 
-              {/* Individual Reports */}
-              <div>
-                <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  Individual Reports ({data.reports.length})
-                </h4>
-                <div className="space-y-2">
-                  {data.reports.map((item: any) => {
-                    const gapConfig = item.report.gapLevel ? GAP_LEVEL_CONFIG[item.report.gapLevel] : null;
-                    return (
-                      <div key={item.report.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-card">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{item.user?.name || "Anonymous"}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              {item.sector && <span className="text-xs text-muted-foreground">{item.sector.name}</span>}
-                              {gapConfig && (
-                                <Badge variant="outline" className={`text-xs ${gapConfig.color}`}>
-                                  {gapConfig.label}
-                                </Badge>
-                              )}
-                              <span className="text-xs text-muted-foreground">
-                                Score: {Math.round(parseFloat(String(item.report.overallScore || 0)))}%
-                              </span>
+                {/* Individual Respondents */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                    <FileText className="w-3.5 h-3.5 inline mr-1" />
+                    Individual Reports ({data.summary.respondentSummaries.length})
+                  </p>
+                  <div className="space-y-1.5">
+                    {data.summary.respondentSummaries.map((r, i) => {
+                      const gapConfig = r.gapLevel ? GAP_LEVEL_CONFIG[r.gapLevel] : null;
+                      // Find the report surveyId from the original reports list
+                      return (
+                        <div key={i} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-background text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-medium text-foreground text-xs truncate">{r.name}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-xs text-muted-foreground">{r.sector}</span>
+                                {gapConfig && (
+                                  <Badge variant="outline" className={`text-xs py-0 ${gapConfig.color}`}>{gapConfig.label}</Badge>
+                                )}
+                                <span className="text-xs text-muted-foreground">Score: {r.overallScore}%</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="shrink-0"
-                          onClick={() => navigate(`/survey/${item.report.surveyId}/report`)}
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
+
+              {/* ── AI Sections ─────────────────────────────────────────────── */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-primary" />
+                  <h4 className="text-sm font-semibold text-foreground">TESDA/NTESDP Training Action Plan</h4>
+                  <Badge variant="secondary" className="text-xs ml-auto">
+                    {generatedCount}/{totalSections} sections · Uses AI credits
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Generate only the sections you need. Each section is cached after generation — clicking <strong>Generate</strong> again uses AI credits only if you choose <strong>Regenerate</strong>. Start with <strong>Section 3 (Competency Gap)</strong> and <strong>Section 6 (Priority Matrix)</strong> for the highest-impact insights.
+                </p>
+
+                {SECTIONS.map((sectionDef) => {
+                  const cached = data.sections?.find((s) => s.sectionKey === sectionDef.key);
+                  return (
+                    <SectionCard
+                      key={sectionDef.key}
+                      sectionDef={sectionDef}
+                      groupId={group.id}
+                      cachedContent={cached?.content}
+                      cachedModel={cached?.modelUsed}
+                      cachedAt={cached?.updatedAt}
+                      onGenerated={handleSectionGenerated}
+                    />
+                  );
+                })}
+              </div>
+
             </div>
           )}
         </CardContent>
@@ -479,7 +597,6 @@ export default function AdminReports() {
         {/* All Reports Tab */}
         <TabsContent value="all" className="mt-4">
           <div className="space-y-4">
-            {/* Filters */}
             <div className="flex items-center gap-3 flex-wrap">
               <Filter className="w-4 h-4 text-muted-foreground" />
               <div className="relative flex-1 max-w-xs">
@@ -576,15 +693,13 @@ export default function AdminReports() {
               <CardContent className="pt-4 pb-3">
                 <div className="flex gap-3">
                   <Brain className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                  <div className="text-sm">
-                    <p className="font-semibold text-foreground mb-1">AI-Powered TESDA/NTESDP Group Analysis</p>
+                  <div className="text-sm space-y-1">
+                    <p className="font-semibold text-foreground">Efficient AI-Powered TESDA/NTESDP Group Analysis</p>
                     <p className="text-muted-foreground leading-relaxed">
-                      Click <strong>"View Analysis"</strong> on any group to generate a comprehensive Training Action Plan
-                      aligned with the <strong>TESDA/NTESDP framework</strong>. The report covers all 9 dimensions:
-                      Industry Profile &amp; Context, Occupational Mapping, Competency Gap Analysis, Skills Categorization (Basic/Common/Core),
-                      Technology &amp; Equipment Requirements, Training Priority Matrix, Training Beneficiaries,
-                      Training Delivery Mode Analysis, and a <strong>Training Plan Output table</strong> with implementation timeline and success metrics.
-                      Use the <strong>Export</strong> button to download the report as a Markdown file, or <strong>Regenerate</strong> to refresh the analysis with the latest data.
+                      Each group shows a <strong>free summary dashboard</strong> (score distribution, category scores, top gaps, individual reports) computed instantly from survey data — no AI credits needed.
+                      Below the dashboard are <strong>9 TESDA framework sections</strong> you can generate individually on demand.
+                      Sections are <strong>cached after generation</strong> — AI credits are only spent when you click <strong>Generate</strong> for the first time or <strong>Regenerate</strong> to refresh.
+                      Start with <strong>Section 3 (Competency Gap)</strong> and <strong>Section 6 (Priority Matrix)</strong> for the most actionable insights.
                     </p>
                   </div>
                 </div>

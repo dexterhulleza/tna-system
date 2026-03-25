@@ -158,3 +158,15 @@
 - [x] Updated default model to gemini-2.5-flash in aiProvider.ts and testAiConnection
 - [x] Updated AdminAISettings.tsx model dropdown to show only gemini-2.5-flash and gemini-2.5-pro
 - [x] 27 tests passing, 0 TypeScript errors
+
+## Group Analysis Redesign - Coherent + Credit-Efficient (Mar 26 2026)
+- [x] DB: group_analysis_sections table for per-section AI caching (upsert/get/delete helpers)
+- [x] Backend: computeGroupSummary() helper - aggregate individual responses into stats (no AI, free)
+- [x] Backend: tRPC groupSummary procedure - returns computed stats + cached sections in one call
+- [x] Backend: tRPC generateSection procedure - generates a single TESDA section on demand with caching
+- [x] Backend: tRPC deleteSection procedure - clears cached section for regeneration
+- [x] Frontend: Free summary dashboard (score distribution bar, category score bars, top 5 gaps, respondent list)
+- [x] Frontend: 9 TESDA section cards with Generate/Regenerate/Export buttons and cache timestamp
+- [x] Frontend: Export All button for all generated sections as a single Markdown file
+- [x] Frontend: Updated explanation banner describing credit-efficient workflow
+- [x] 27 tests passing, 0 TypeScript errors

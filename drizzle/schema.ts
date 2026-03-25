@@ -309,3 +309,24 @@ export const aiSettings = mysqlTable("ai_settings", {
 
 export type AiSettings = typeof aiSettings.$inferSelect;
 export type InsertAiSettings = typeof aiSettings.$inferInsert;
+
+// ─── Group Analysis Sections (per-section AI cache) ──────────────────────────
+// Stores individually generated TESDA analysis sections per group.
+// Each section is generated on-demand and cached here so AI credits are only
+// spent once per section per group (unless explicitly regenerated).
+export const groupAnalysisSections = mysqlTable("group_analysis_sections", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull().references(() => surveyGroups.id),
+  sectionKey: varchar("sectionKey", { length: 60 }).notNull(),
+  // sectionKey values: industry_profile | occupational_mapping | competency_gap |
+  //   skills_categorization | technology_equipment | priority_matrix |
+  //   training_beneficiaries | delivery_mode | training_plan
+  sectionTitle: varchar("sectionTitle", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  modelUsed: varchar("modelUsed", { length: 100 }),
+  generatedBy: int("generatedBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GroupAnalysisSection = typeof groupAnalysisSections.$inferSelect;
+export type InsertGroupAnalysisSection = typeof groupAnalysisSections.$inferInsert;

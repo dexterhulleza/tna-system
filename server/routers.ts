@@ -51,6 +51,11 @@ import {
   getSurveyConfig,
   upsertSurveyConfig,
   saveAiGeneratedQuestions,
+  computeGroupSummary,
+  getGroupAnalysisSections,
+  getGroupAnalysisSection,
+  upsertGroupAnalysisSection,
+  deleteGroupAnalysisSection,
 } from "./db";
 import { analyzeGaps, generateRecommendations } from "./tnaEngine";
 
@@ -342,9 +347,188 @@ Write in a professional but accessible tone. Use actual data numbers from the su
           analysis: aiAnalysis,
         };
       }),
-  }),
 
-  // ─── Sectors ───────────────────────────────────────────────────────────────
+    // ── Free computed summary (no AI credits) ────────────────────────────────
+    groupSummary: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ input }) => {
+        const group = await getSurveyGroupById(input.groupId);
+        if (!group) throw new TRPCError({ code: "NOT_FOUND", message: "Group not found" });
+        const summary = await computeGroupSummary(input.groupId);
+        const sections = await getGroupAnalysisSections(input.groupId);
+        const surveyConfig = await getSurveyConfig(input.groupId).catch(() => null);
+        return { group, summary, sections, surveyConfig };
+      }),
+
+    // ── Get cached sections ───────────────────────────────────────────────────
+    getAnalysisSections: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ input }) => {
+        return getGroupAnalysisSections(input.groupId);
+      }),
+
+    // ── Generate a single TESDA section on demand ─────────────────────────────
+    generateSection: adminProcedure
+      .input(
+        z.object({
+          groupId: z.number(),
+          sectionKey: z.enum([
+            "industry_profile",
+            "occupational_mapping",
+            "competency_gap",
+            "skills_categorization",
+            "technology_equipment",
+            "priority_matrix",
+            "training_beneficiaries",
+            "delivery_mode",
+            "training_plan",
+          ]),
+          forceRegenerate: z.boolean().optional().default(false),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        // Return cached version unless forceRegenerate
+        if (!input.forceRegenerate) {
+          const cached = await getGroupAnalysisSection(input.groupId, input.sectionKey);
+          if (cached) return { section: cached, fromCache: true };
+        }
+
+        const group = await getSurveyGroupById(input.groupId);
+        if (!group) throw new TRPCError({ code: "NOT_FOUND", message: "Group not found" });
+
+        const summary = await computeGroupSummary(input.groupId);
+        if (!summary || summary.totalRespondents === 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No survey responses found for this group." });
+        }
+
+        const surveyConfig = await getSurveyConfig(input.groupId).catch(() => null);
+        const existingSections = await getGroupAnalysisSections(input.groupId);
+
+        // Build context string from summary
+        const contextData = JSON.stringify({
+          groupName: group.name,
+          groupDescription: group.description,
+          organizationName: surveyConfig?.organizationName ?? null,
+          industryContext: surveyConfig?.industryContext ?? null,
+          surveyPurpose: surveyConfig?.surveyPurpose ?? null,
+          surveyObjectives: surveyConfig?.surveyObjectives ?? [],
+          businessGoals: surveyConfig?.businessGoals ?? [],
+          targetParticipants: surveyConfig?.targetParticipants ?? null,
+          participantRoles: surveyConfig?.participantRoles ?? [],
+          targetCompetencies: surveyConfig?.targetCompetencies ?? [],
+          knownSkillGaps: surveyConfig?.knownSkillGaps ?? null,
+          priorityAreas: surveyConfig?.priorityAreas ?? [],
+          regulatoryRequirements: surveyConfig?.regulatoryRequirements ?? null,
+          totalRespondents: summary.totalRespondents,
+          avgScore: summary.avgScore,
+          minScore: summary.minScore,
+          maxScore: summary.maxScore,
+          scoreDistribution: summary.scoreDistribution,
+          gapDistribution: summary.gapDistribution,
+          avgCategoryScores: summary.avgCategoryScores,
+          weakCategories: summary.weakCategories,
+          topGaps: summary.topGaps,
+          sectorDistribution: summary.sectorDistribution,
+          primarySector: summary.primarySector,
+        }, null, 2);
+
+        // Include already-generated sections as context for coherence
+        const priorSectionsContext = existingSections.length > 0
+          ? `\n\nALREADY GENERATED SECTIONS (use these for coherence and cross-referencing):\n` +
+            existingSections
+              .filter((s) => s.sectionKey !== input.sectionKey)
+              .map((s) => `### ${s.sectionTitle}\n${s.content.slice(0, 800)}...`)
+              .join("\n\n")
+          : "";
+
+        const SECTION_PROMPTS: Record<string, { title: string; prompt: string }> = {
+          industry_profile: {
+            title: "Section 1: Industry Profile and Context",
+            prompt: `Write Section 1: Industry Profile and Context for a TESDA/NTESDP Training Needs Analysis report.\n\nCover:\n- Industry direction and future skills demand based on survey data\n- Key industry trends affecting workforce requirements\n- Regulatory and policy context (TESDA, NTESDP, relevant legislation)\n- Economic significance of the sector\n- Current workforce profile based on survey respondents\n\nWrite 3-5 substantive paragraphs. Reference actual numbers from the survey data.`,
+          },
+          occupational_mapping: {
+            title: "Section 2: Occupational Mapping (Job Role Analysis)",
+            prompt: `Write Section 2: Occupational Mapping for a TESDA/NTESDP TNA report.\n\nCover:\n- Priority job roles identified from the survey group\n- Competency requirements per role aligned with TESDA qualification standards\n- Critical occupations with the highest training needs\n- Role-specific skill requirements vs. current competency levels\n- TESDA qualification levels applicable to identified roles\n\nInclude a markdown table mapping job roles to required competencies and current gaps.`,
+          },
+          competency_gap: {
+            title: "Section 3: Competency Gap Analysis",
+            prompt: `Write Section 3: Competency Gap Analysis for a TESDA/NTESDP TNA report.\n\nCover:\n- Gaps between current competencies and required competencies\n- Analysis of the top identified gaps from survey data (reference specific gap percentages)\n- Category-by-category gap breakdown\n- Critical vs. moderate vs. minor gaps\n- Root cause analysis for major gaps\n\nInclude a markdown table showing categories, average scores, gap percentages, and severity levels. Reference the actual survey numbers.`,
+          },
+          skills_categorization: {
+            title: "Section 4: Skills Categorization (TESDA Framework)",
+            prompt: `Write Section 4: Skills Categorization aligned with the TESDA framework for a TNA report.\n\nCategorize identified skills needs into:\n- **Basic Competencies:** Communication, teamwork, problem-solving, digital literacy\n- **Common Competencies:** Shared across the sector/industry\n- **Core Competencies:** Specific to the occupation/qualification\n- **Cross-Cutting Competencies:** 21st century skills, sustainability, entrepreneurship\n\nFor each category, list specific skills identified as gaps from the survey data. Align with TESDA Training Regulations where applicable.`,
+          },
+          technology_equipment: {
+            title: "Section 5: Technology and Equipment Requirements",
+            prompt: `Write Section 5: Technology and Equipment Requirements Analysis for a TESDA/NTESDP TNA report.\n\nCover:\n- Equipment and technology needed for training delivery\n- Digital infrastructure requirements\n- Equipment investment estimate (Low/Medium/High) with justification\n- Technology gaps vs. skills gaps distinction\n- Specific tools, machines, or platforms required per training area\n\nReference the survey data to justify equipment needs. Include a markdown table of required equipment/technology by training area.`,
+          },
+          priority_matrix: {
+            title: "Section 6: Training Priority Matrix",
+            prompt: `Write Section 6: Training Priority Matrix for a TESDA/NTESDP TNA report.\n\nRank training needs based on: urgency, number of workers affected, economic impact, and NTESDP alignment.\n\nFor each priority, provide:\n- Priority number and training topic\n- Urgency level (🔴 Critical / 🟡 High / 🟢 Medium)\n- Workers affected (count and percentage from survey data)\n- Economic impact (High/Medium/Low with brief explanation)\n- NTESDP alignment\n- One-paragraph justification\n\nEnd with a summary markdown table of all priorities ranked. Reference actual survey numbers throughout.`,
+          },
+          training_beneficiaries: {
+            title: "Section 7: Training Beneficiaries",
+            prompt: `Write Section 7: Training Beneficiaries for a TESDA/NTESDP TNA report.\n\nIdentify who should receive training:\n- **New Entrants:** Foundational training needs\n- **Existing Workers (Upskilling):** Skills upgrade needs\n- **Existing Workers (Reskilling):** Role transition needs\n- **Supervisors and Team Leaders:** Management and technical leadership training\n- **Trainers and Assessors:** Trainer upskilling and assessor certification\n- **Industry Partners:** Orientation and partnership training\n\nFor each group, estimate beneficiary count based on survey data. Include a markdown table summarizing beneficiary groups, estimated numbers, and priority training areas.`,
+          },
+          delivery_mode: {
+            title: "Section 8: Training Delivery Mode Analysis",
+            prompt: `Write Section 8: Training Delivery Mode Analysis for a TESDA/NTESDP TNA report.\n\nRecommend delivery approaches for each priority training area:\n- Face-to-Face / Classroom Training\n- Online / E-Learning\n- Blended Learning\n- On-the-Job Training (OJT) / Apprenticeship\n- Competency-Based Training (CBT) per TESDA standards\n- Industry Immersion / Plant Visit\n\nConsider: geographic reach, participant availability, budget constraints, trainer availability.\nInclude a markdown table mapping training topics to recommended delivery modes with justification.`,
+          },
+          training_plan: {
+            title: "Section 9: Training Plan Output",
+            prompt: `Write Section 9: Training Plan Output for a TESDA/NTESDP TNA report.\n\nPresent the final recommended training plan as a structured markdown table:\n\n| Priority | Training Program Title | Target Group | Duration | Delivery Mode | Partner Industry/Organization | Expected Outcome |\n|----------|----------------------|--------------|----------|---------------|-------------------------------|------------------|\n\nAfter the table, add:\n- **Implementation Timeline:** 12-month rollout schedule (Q1-Q4)\n- **Estimated Total Investment:** Low/Medium/High with justification\n- **Quick Wins (0-3 months):** Training that can start immediately\n- **Success Metrics:** 3-5 measurable indicators\n- **Next Steps:** 5 concrete actions for the next 30 days\n\nEnsure this plan is coherent with and directly addresses the gaps and priorities identified in the previous sections.`,
+          },
+        };
+
+        const sectionDef = SECTION_PROMPTS[input.sectionKey];
+        if (!sectionDef) throw new TRPCError({ code: "BAD_REQUEST", message: "Unknown section key" });
+
+        const systemPrompt = `You are a senior TESDA-aligned Training Needs Analysis specialist producing a section of a comprehensive TNA report. Write professionally but accessibly for HR managers, training officers, and government officials. Use actual data numbers from the survey results wherever possible. Be specific and actionable.`;
+
+        const userPrompt = `SURVEY DATA AND GROUP CONFIGURATION:\n${contextData}${priorSectionsContext}\n\n---\n\n${sectionDef.prompt}\n\nWrite only this section. Do not include other sections. Use markdown formatting with headers, tables, and bullet points as appropriate.`;
+
+        let content: string;
+        let modelUsed: string | undefined;
+        try {
+          const result = await invokeAI({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+          });
+          content = typeof result === "string" ? result : (result as any)?.text ?? String(result);
+          // Try to get model info from active settings
+          const aiSettings = await getActiveAiSettings();
+          modelUsed = aiSettings?.model ?? "built-in";
+        } catch (err: any) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `AI generation failed: ${err?.message ?? "Unknown error"}. Check Admin → AI Settings.`,
+          });
+        }
+
+        await upsertGroupAnalysisSection({
+          groupId: input.groupId,
+          sectionKey: input.sectionKey,
+          sectionTitle: sectionDef.title,
+          content,
+          modelUsed,
+          generatedBy: ctx.user.id,
+        });
+
+        const saved = await getGroupAnalysisSection(input.groupId, input.sectionKey);
+        return { section: saved!, fromCache: false };
+      }),
+
+    // ── Delete a cached section (force next generate to re-run AI) ────────────
+    deleteSection: adminProcedure
+      .input(z.object({ groupId: z.number(), sectionKey: z.string() }))
+      .mutation(async ({ input }) => {
+        await deleteGroupAnalysisSection(input.groupId, input.sectionKey);
+        return { success: true };
+      }),
+  }),
+  // ─── Sectorss ───────────────────────────────────────────────────────────────
   sectors: router({
     list: publicProcedure
       .input(z.object({ activeOnly: z.boolean().optional().default(true) }))
