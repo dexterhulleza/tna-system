@@ -232,6 +232,51 @@ export const recommendations = mysqlTable("recommendations", {
 export type Recommendation = typeof recommendations.$inferSelect;
 export type InsertRecommendation = typeof recommendations.$inferInsert;
 
+// ─── Survey Configurations ──────────────────────────────────────────────────
+// Admins/trainers/HR officers define objectives and context per group to guide
+// AI-generated question recommendations for that group's TNA.
+export const surveyConfigurations = mysqlTable("survey_configurations", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull().references(() => surveyGroups.id),
+  // Core objectives
+  surveyTitle: varchar("surveyTitle", { length: 500 }),
+  surveyPurpose: text("surveyPurpose"),
+  surveyObjectives: json("surveyObjectives").$type<string[]>().default([]),
+  // Organizational context
+  organizationName: varchar("organizationName", { length: 255 }),
+  industryContext: text("industryContext"),
+  businessGoals: json("businessGoals").$type<string[]>().default([]),
+  // Target participants
+  targetParticipants: text("targetParticipants"),
+  participantRoles: json("participantRoles").$type<string[]>().default([]),
+  expectedParticipantCount: int("expectedParticipantCount"),
+  // Competency focus
+  targetCompetencies: json("targetCompetencies").$type<string[]>().default([]),
+  knownSkillGaps: text("knownSkillGaps"),
+  priorityAreas: json("priorityAreas").$type<string[]>().default([]),
+  // Survey period
+  surveyStartDate: varchar("surveyStartDate", { length: 20 }),
+  surveyEndDate: varchar("surveyEndDate", { length: 20 }),
+  // Additional context
+  additionalNotes: text("additionalNotes"),
+  regulatoryRequirements: text("regulatoryRequirements"),
+  // AI-generated question suggestions (stored as JSON after generation)
+  aiGeneratedQuestions: json("aiGeneratedQuestions").$type<Array<{
+    questionText: string;
+    category: string;
+    questionType: string;
+    rationale: string;
+    accepted: boolean;
+  }>>(),
+  aiGeneratedAt: timestamp("aiGeneratedAt"),
+  createdBy: int("createdBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SurveyConfiguration = typeof surveyConfigurations.$inferSelect;
+export type InsertSurveyConfiguration = typeof surveyConfigurations.$inferInsert;
+
 // ─── Admin Permissions ────────────────────────────────────────────────────────
 export const adminPermissions = mysqlTable("admin_permissions", {
   id: int("id").autoincrement().primaryKey(),

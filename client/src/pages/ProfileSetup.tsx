@@ -7,7 +7,7 @@ import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { toast } from "sonner";
-import { BookOpen, Briefcase, GraduationCap, ClipboardCheck, UserCog } from "lucide-react";
+import { BookOpen, Briefcase, GraduationCap, ClipboardCheck, UserCog, ArrowLeft } from "lucide-react";
 
 const ROLES = [
   {
@@ -77,6 +77,16 @@ export default function ProfileSetup() {
 
   return (
     <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
+      {/* Back to home */}
+      <div className="fixed top-4 left-4">
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors bg-background/80 backdrop-blur-sm px-3 py-1.5 rounded-full border shadow-sm"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Home</span>
+        </button>
+      </div>
       <div className="w-full max-w-2xl">
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">

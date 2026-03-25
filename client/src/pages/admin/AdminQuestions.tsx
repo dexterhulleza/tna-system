@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Square, CheckSquare, MinusSquare, EyeOff, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, BookOpen, Filter, Tag, Upload, Download, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Square, CheckSquare, MinusSquare, EyeOff, AlertTriangle, ArrowLeft, Home, LayoutDashboard } from "lucide-react";
+import { useLocation } from "wouter";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useRef, useMemo, useCallback } from "react";
 
@@ -75,6 +76,7 @@ const emptyForm = {
 };
 
 export default function AdminQuestions() {
+  const [, navigate] = useLocation();
   const [filterSector, setFilterSector] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterGroup, setFilterGroup] = useState<string>("all");
@@ -261,6 +263,20 @@ export default function AdminQuestions() {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumb navigation */}
+      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <button onClick={() => navigate("/")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <Home className="w-3.5 h-3.5" />
+          <span>Home</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <button onClick={() => navigate("/admin")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <LayoutDashboard className="w-3.5 h-3.5" />
+          <span>Admin Dashboard</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <span className="text-foreground font-medium">Manage Questions</span>
+      </nav>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Manage Questions</h1>

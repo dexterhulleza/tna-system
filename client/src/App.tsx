@@ -15,6 +15,7 @@ import AdminQuestions from "./pages/admin/AdminQuestions";
 import AdminSectors from "./pages/admin/AdminSectors";
 import AdminReports from "./pages/admin/AdminReports";
 import ManageGroups from "./pages/admin/ManageGroups";
+import SurveyConfiguration from "./pages/admin/SurveyConfiguration";
 import ProfileSetup from "./pages/ProfileSetup";
 import Dashboard from "./pages/Dashboard";
 
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/admin/sectors" component={AdminSectors} />
       <Route path="/admin/reports" component={AdminReports} />
       <Route path="/admin/groups" component={ManageGroups} />
+      <Route path="/admin/survey-config" component={SurveyConfiguration} />
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

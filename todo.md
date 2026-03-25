@@ -89,3 +89,19 @@
 - [x] Backend: bulkDeactivate and bulkDelete tRPC procedures for questions
 - [x] Frontend: per-row checkboxes, Select All on Page, bulk action toolbar (deactivate / delete)
 - [x] Frontend: confirmation dialog before bulk delete
+
+## Navigation (Mar 22 2026)
+- [x] Audit all pages for missing back/home navigation
+- [x] Add persistent breadcrumb/back navigation to all admin pages
+- [x] Add back-to-home navigation to survey pages and standalone pages
+
+## Survey Configuration Module (Mar 22 2026)
+- [x] DB: survey_configurations table (groupId, objectives, businessGoals, targetCompetencies, industryContext, targetParticipants, surveyPeriod, notes, createdBy)
+- [x] Backend: CRUD procedures for survey configurations (create, update, get by group)
+- [x] Backend: AI endpoint to generate recommended question list from config context
+- [x] Frontend: Survey Configuration page accessible to admin/trainer/hr_officer
+- [x] Frontend: Configuration form (objectives, business goals, industry context, target participants, competency areas)
+- [x] Frontend: AI-generated question recommendations panel with accept/reject per question
+- [x] Frontend: Link configuration to group in Manage Groups
+- [x] Frontend: Show configuration summary in Group Analysis report
+- [x] Navigation: Add breadcrumb to ManageGroups, SurveyHistory, ProfileSetup, AdminReports

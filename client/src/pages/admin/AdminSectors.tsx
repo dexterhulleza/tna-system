@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, ChevronDown, ChevronRight, Globe } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, ChevronDown, ChevronRight, Globe, Home, LayoutDashboard } from "lucide-react";
+import { useLocation } from "wouter";
 
 const SECTOR_ICONS: Record<string, string> = {
   ICT: "💻", MET: "⚙️", CAF: "🎨", HW: "❤️", BPS: "🏗️", TL: "🚗",
@@ -21,6 +22,7 @@ const emptySector = { id: undefined as number | undefined, name: "", code: "", d
 const emptySkillArea = { id: undefined as number | undefined, sectorId: 0, name: "", code: "", description: "", isActive: true, sortOrder: 0 };
 
 export default function AdminSectors() {
+  const [, navigate] = useLocation();
   const [expandedSector, setExpandedSector] = useState<number | null>(null);
   const [showSectorDialog, setShowSectorDialog] = useState(false);
   const [showSkillAreaDialog, setShowSkillAreaDialog] = useState(false);
@@ -57,6 +59,17 @@ export default function AdminSectors() {
 
   return (
     <div className="space-y-6">
+      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <button onClick={() => navigate("/")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <Home className="w-3.5 h-3.5" /><span>Home</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <button onClick={() => navigate("/admin")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <LayoutDashboard className="w-3.5 h-3.5" /><span>Admin Dashboard</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <span className="text-foreground font-medium">Manage Sectors</span>
+      </nav>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Manage Sectors & Skill Areas</h1>

@@ -45,6 +45,9 @@ import {
   upsertSector,
   upsertSkillArea,
   upsertSurveyGroup,
+  getSurveyConfig,
+  upsertSurveyConfig,
+  saveAiGeneratedQuestions,
 } from "./db";
 import { analyzeGaps, generateRecommendations } from "./tnaEngine";
 
@@ -530,6 +533,154 @@ Write in a professional, academic tone suitable for a government or institutiona
         .query(({ input }) => getAdminPermissions(input.userId)),
     }),
   }),
-});
 
+  // ─── Survey Configuration ──────────────────────────────────────────────────
+  surveyConfig: router({
+      get: protectedProcedure
+        .input(z.object({ groupId: z.number() }))
+        .query(({ input }) => getSurveyConfig(input.groupId)),
+
+      save: protectedProcedure
+        .input(
+          z.object({
+            groupId: z.number(),
+            surveyTitle: z.string().optional(),
+            surveyPurpose: z.string().optional(),
+            surveyObjectives: z.array(z.string()).optional(),
+            organizationName: z.string().optional(),
+            industryContext: z.string().optional(),
+            businessGoals: z.array(z.string()).optional(),
+            targetParticipants: z.string().optional(),
+            participantRoles: z.array(z.string()).optional(),
+            expectedParticipantCount: z.number().optional(),
+            targetCompetencies: z.array(z.string()).optional(),
+            knownSkillGaps: z.string().optional(),
+            priorityAreas: z.array(z.string()).optional(),
+            surveyStartDate: z.string().optional(),
+            surveyEndDate: z.string().optional(),
+            additionalNotes: z.string().optional(),
+            regulatoryRequirements: z.string().optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const config = await upsertSurveyConfig({ ...input, createdBy: ctx.user.id });
+          return config;
+        }),
+
+      generateQuestions: protectedProcedure
+        .input(z.object({ groupId: z.number() }))
+        .mutation(async ({ ctx, input }) => {
+          const config = await getSurveyConfig(input.groupId);
+          if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Survey configuration not found. Please save the configuration first." });
+
+          const contextSummary = [
+            config.surveyTitle ? `Survey Title: ${config.surveyTitle}` : "",
+            config.surveyPurpose ? `Purpose: ${config.surveyPurpose}` : "",
+            config.surveyObjectives?.length ? `Objectives:\n${(config.surveyObjectives as string[]).map((o, i) => `  ${i + 1}. ${o}`).join("\n")}` : "",
+            config.organizationName ? `Organization: ${config.organizationName}` : "",
+            config.industryContext ? `Industry Context: ${config.industryContext}` : "",
+            config.businessGoals?.length ? `Business Goals:\n${(config.businessGoals as string[]).map((g, i) => `  ${i + 1}. ${g}`).join("\n")}` : "",
+            config.targetParticipants ? `Target Participants: ${config.targetParticipants}` : "",
+            config.participantRoles?.length ? `Participant Roles: ${(config.participantRoles as string[]).join(", ")}` : "",
+            config.targetCompetencies?.length ? `Target Competencies:\n${(config.targetCompetencies as string[]).map((c, i) => `  ${i + 1}. ${c}`).join("\n")}` : "",
+            config.knownSkillGaps ? `Known Skill Gaps: ${config.knownSkillGaps}` : "",
+            config.priorityAreas?.length ? `Priority Areas: ${(config.priorityAreas as string[]).join(", ")}` : "",
+            config.regulatoryRequirements ? `Regulatory Requirements: ${config.regulatoryRequirements}` : "",
+          ].filter(Boolean).join("\n\n");
+
+          const systemPrompt = `You are an expert Training Needs Analysis (TNA) specialist with deep knowledge of competency frameworks, adult learning theory, and workforce development. Your role is to generate targeted, practical survey questions that will effectively identify training gaps and development needs.
+
+You follow evidence-based TNA methodologies including:
+- McGhee & Thayer's Three-Level Analysis (Organizational, Job/Task, Individual)
+- Mager & Pipe's Performance Analysis model
+- Boydell's Training Needs Identification framework
+- ADDIE instructional design model
+- TESDA Competency-Based Training (CBT) standards
+
+Generate survey questions that are:
+1. Specific and measurable
+2. Aligned with the stated business objectives and competency gaps
+3. Appropriate for the target participant roles
+4. Grounded in the industry context provided
+5. Balanced across TNA categories (organizational, job/task, individual, training feasibility, evaluation)
+
+Return ONLY a valid JSON array of question objects. Each object must have exactly these fields:
+- questionText: string (the actual survey question)
+- category: one of "organizational"|"job_task"|"individual"|"training_feasibility"|"evaluation_success"|"custom"
+- questionType: one of "rating"|"yes_no"|"scale"|"text"|"multiple_choice"
+- rationale: string (brief explanation of why this question is relevant based on the context)
+- accepted: boolean (always set to false initially)`;
+
+          const userPrompt = `Based on the following TNA survey configuration, generate 20-25 targeted survey questions that will help identify training needs and competency gaps.
+
+${contextSummary}
+
+Generate questions that directly address the stated objectives, business goals, and competency areas. Distribute questions across all relevant TNA categories. For rating/scale questions, they will use a 1-5 scale. Focus on questions that will surface actionable training insights.`;
+
+          const response = await invokeLLM({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "tna_questions",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    questions: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          questionText: { type: "string" },
+                          category: { type: "string", enum: ["organizational", "job_task", "individual", "training_feasibility", "evaluation_success", "custom"] },
+                          questionType: { type: "string", enum: ["rating", "yes_no", "scale", "text", "multiple_choice"] },
+                          rationale: { type: "string" },
+                          accepted: { type: "boolean" },
+                        },
+                        required: ["questionText", "category", "questionType", "rationale", "accepted"],
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                  required: ["questions"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+
+          const content = response.choices[0].message.content as string;
+          const parsed = JSON.parse(content) as { questions: Array<{ questionText: string; category: string; questionType: string; rationale: string; accepted: boolean }> };
+          const generatedQuestions = parsed.questions;
+
+          await saveAiGeneratedQuestions(config.id, generatedQuestions);
+          return { questions: generatedQuestions, configId: config.id };
+        }),
+
+      acceptQuestions: protectedProcedure
+        .input(
+          z.object({
+            configId: z.number(),
+            acceptedIndices: z.array(z.number()),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db_module = await import("./db");
+          const db = await db_module.getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+          const { surveyConfigurations: scTable } = await import("../drizzle/schema");
+          const { eq: eqOp } = await import("drizzle-orm");
+          const [config] = await db.select().from(scTable).where(eqOp(scTable.id, input.configId)).limit(1);
+          if (!config) throw new TRPCError({ code: "NOT_FOUND" });
+          const existing = (config.aiGeneratedQuestions ?? []) as Array<{ questionText: string; category: string; questionType: string; rationale: string; accepted: boolean }>;
+          const updated = existing.map((q, i) => ({ ...q, accepted: input.acceptedIndices.includes(i) }));
+          await saveAiGeneratedQuestions(input.configId, updated);
+          return { success: true, count: input.acceptedIndices.length };
+        }),
+    }),
+});
 export type AppRouter = typeof appRouter;

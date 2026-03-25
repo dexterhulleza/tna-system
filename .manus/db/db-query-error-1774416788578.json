@@ -1,0 +1,19 @@
+{
+  "query": "CREATE TABLE `survey_configurations` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`groupId` int NOT NULL,\n\t`surveyTitle` varchar(500),\n\t`surveyPurpose` text,\n\t`surveyObjectives` json DEFAULT ('[]'),\n\t`organizationName` varchar(255),\n\t`industryContext` text,\n\t`businessGoals` json DEFAULT ('[]'),\n\t`targetParticipants` text,\n\t`participantRoles` json DEFAULT ('[]'),\n\t`expectedParticipantCount` int,\n\t`targetCompetencies` json DEFAULT ('[]'),\n\t`knownSkillGaps` text,\n\t`priorityAreas` json DEFAULT ('[]'),\n\t`surveyStartDate` varchar(20),\n\t`surveyEndDate` varchar(20),\n\t`additionalNotes` text,\n\t`regulatoryRequirements` text,\n\t`aiGeneratedQuestions` json,\n\t`aiGeneratedAt` timestamp,\n\t`createdBy` int,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `survey_configurations_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `survey_configurations` ADD CONSTRAINT `survey_configurations_groupId_survey_groups_id_fk` FOREIGN KEY (`groupId`) REFERENCES `survey_groups`(`id`) ON DELETE no action ON UPDATE no action;\nALTER TABLE `survey_configurations` ADD CONSTRAINT `survey_configurations_createdBy_users_id_fk` FOREIGN KEY (`createdBy`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2oK6ea4WASNzAPa.692639685ca7 --database VVScSdX3cXq5qbpCSXZ7BV --execute CREATE TABLE `survey_configurations` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`groupId` int NOT NULL,\n\t`surveyTitle` varchar(500),\n\t`surveyPurpose` text,\n\t`surveyObjectives` json DEFAULT ('[]'),\n\t`organizationName` varchar(255),\n\t`industryContext` text,\n\t`businessGoals` json DEFAULT ('[]'),\n\t`targetParticipants` text,\n\t`participantRoles` json DEFAULT ('[]'),\n\t`expectedParticipantCount` int,\n\t`targetCompetencies` json DEFAULT ('[]'),\n\t`knownSkillGaps` text,\n\t`priorityAreas` json DEFAULT ('[]'),\n\t`surveyStartDate` varchar(20),\n\t`surveyEndDate` varchar(20),\n\t`additionalNotes` text,\n\t`regulatoryRequirements` text,\n\t`aiGeneratedQuestions` json,\n\t`aiGeneratedAt` timestamp,\n\t`createdBy` int,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `survey_configurations_id` PRIMARY KEY(`id`)\n);\nALTER TABLE `survey_configurations` ADD CONSTRAINT `survey_configurations_groupId_survey_groups_id_fk` FOREIGN KEY (`groupId`) REFERENCES `survey_groups`(`id`) ON DELETE no action ON UPDATE no action;\nALTER TABLE `survey_configurations` ADD CONSTRAINT `survey_configurations_createdBy_users_id_fk` FOREIGN KEY (`createdBy`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 6 column 39 near \"'[]'),",
+    "\t`organizationName` varchar(255),",
+    "\t`industryContext` text,",
+    "\t`businessGoals` json DEFAULT ('[]'),",
+    "\t`targetParticipants` text,",
+    "\t`participantRoles` json DEFAULT ('[]'),",
+    "\t`expectedParticipantCount` int,",
+    "\t`targetCompetencies` json DEFAULT ('[]'),",
+    "\t`knownSkillGaps` text,",
+    "\t`priorityAreas` json DEFAULT ('[]'),",
+    "\t`surveyStartDate` varchar(20),",
+    "\t`surveyEndDate` varchar"
+  ]
+}

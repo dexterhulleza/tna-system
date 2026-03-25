@@ -8,6 +8,7 @@ import {
   reports,
   sectors,
   skillAreas,
+  surveyConfigurations,
   surveyGroups,
   surveyResponses,
   surveys,
@@ -688,4 +689,69 @@ export async function getDashboardStats() {
     totalReports: Number(reportCount?.count ?? 0),
     totalGroups: Number(groupCount?.count ?? 0),
   };
+}
+
+// ─── Survey Configurations ────────────────────────────────────────────────────
+export async function getSurveyConfig(groupId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const [config] = await db
+    .select()
+    .from(surveyConfigurations)
+    .where(eq(surveyConfigurations.groupId, groupId))
+    .limit(1);
+  return config ?? null;
+}
+
+export async function upsertSurveyConfig(data: {
+  groupId: number;
+  createdBy: number;
+  surveyTitle?: string;
+  surveyPurpose?: string;
+  surveyObjectives?: string[];
+  organizationName?: string;
+  industryContext?: string;
+  businessGoals?: string[];
+  targetParticipants?: string;
+  participantRoles?: string[];
+  expectedParticipantCount?: number;
+  targetCompetencies?: string[];
+  knownSkillGaps?: string;
+  priorityAreas?: string[];
+  surveyStartDate?: string;
+  surveyEndDate?: string;
+  additionalNotes?: string;
+  regulatoryRequirements?: string;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  const existing = await getSurveyConfig(data.groupId);
+  if (existing) {
+    await db
+      .update(surveyConfigurations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(surveyConfigurations.id, existing.id));
+    return getSurveyConfig(data.groupId);
+  } else {
+    await db.insert(surveyConfigurations).values(data);
+    return getSurveyConfig(data.groupId);
+  }
+}
+
+export async function saveAiGeneratedQuestions(
+  configId: number,
+  questions: Array<{
+    questionText: string;
+    category: string;
+    questionType: string;
+    rationale: string;
+    accepted: boolean;
+  }>
+) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(surveyConfigurations)
+    .set({ aiGeneratedQuestions: questions, aiGeneratedAt: new Date() })
+    .where(eq(surveyConfigurations.id, configId));
 }

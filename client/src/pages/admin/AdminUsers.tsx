@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Users, Search, Settings2, Loader2, Shield, User } from "lucide-react";
+import { Users, Search, Settings2, Loader2, Shield, User, Home, LayoutDashboard, ChevronRight } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useLocation } from "wouter";
 
 const TNA_ROLE_LABELS: Record<string, string> = {
   industry_worker: "Industry Worker",
@@ -28,6 +29,7 @@ const ADMIN_LEVEL_LABELS: Record<string, string> = {
 };
 
 export default function AdminUsers() {
+  const [, navigate] = useLocation();
   const { user: currentUser } = useAuth();
   const [search, setSearch] = useState("");
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -87,6 +89,17 @@ export default function AdminUsers() {
 
   return (
     <div className="space-y-6">
+      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <button onClick={() => navigate("/")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <Home className="w-3.5 h-3.5" /><span>Home</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <button onClick={() => navigate("/admin")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <LayoutDashboard className="w-3.5 h-3.5" /><span>Admin Dashboard</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <span className="text-foreground font-medium">Manage Users</span>
+      </nav>
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">Manage Users</h1>
         <p className="text-muted-foreground text-sm mt-1">View and manage user accounts, roles, and permissions</p>

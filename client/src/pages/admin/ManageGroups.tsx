@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Tag, Users, Info } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, Users, Info, Home, LayoutDashboard, ChevronRight } from "lucide-react";
+import { useLocation } from "wouter";
 
 type Group = {
   id: number;
@@ -60,6 +61,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function ManageGroups() {
+  const [, navigate] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -126,6 +128,18 @@ export default function ManageGroups() {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <button onClick={() => navigate("/")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <Home className="w-3.5 h-3.5" /><span>Home</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <button onClick={() => navigate("/admin")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <LayoutDashboard className="w-3.5 h-3.5" /><span>Admin Dashboard</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <span className="text-foreground font-medium">Manage Groups</span>
+      </nav>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

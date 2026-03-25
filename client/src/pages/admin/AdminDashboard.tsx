@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Users, BookOpen, BarChart3, Settings, FileText, ChevronRight, Loader2, AlertTriangle, Tag } from "lucide-react";
+import { Users, BookOpen, BarChart3, Settings, FileText, ChevronRight, Loader2, AlertTriangle, Tag, Sparkles } from "lucide-react";
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
@@ -138,6 +138,18 @@ export default function AdminDashboard() {
                 </div>
                 <CardTitle className="font-display text-base mt-2">Manage Groups</CardTitle>
                 <CardDescription className="text-xs">Create group tags to organize respondents into cohorts for group analysis</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/survey-config")}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-violet-600" />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <CardTitle className="font-display text-base mt-2">Survey Configuration</CardTitle>
+                <CardDescription className="text-xs">Define objectives and business goals per group, then generate AI-tailored TNA questions</CardDescription>
               </CardHeader>
             </Card>
           </div>

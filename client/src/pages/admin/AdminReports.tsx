@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Search, FileText, Loader2, BarChart3, User, Filter, Tag, Brain, ChevronDown, ChevronUp, Users, TrendingDown, AlertTriangle, BookOpen } from "lucide-react";
+import { Search, FileText, Loader2, BarChart3, User, Filter, Tag, Brain, ChevronDown, ChevronUp, Users, TrendingDown, AlertTriangle, BookOpen, Home, LayoutDashboard, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 const GAP_LEVEL_CONFIG: Record<string, { color: string; label: string }> = {
@@ -240,6 +240,17 @@ export default function AdminReports() {
 
   return (
     <div className="space-y-6">
+      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <button onClick={() => navigate("/")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <Home className="w-3.5 h-3.5" /><span>Home</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <button onClick={() => navigate("/admin")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <LayoutDashboard className="w-3.5 h-3.5" /><span>Admin Dashboard</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <span className="text-foreground font-medium">All Reports</span>
+      </nav>
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">All Reports</h1>
         <p className="text-muted-foreground text-sm mt-1">View all TNA reports and AI-generated group analysis</p>

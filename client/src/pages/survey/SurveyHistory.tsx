@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { BookOpen, ChevronRight, Clock, FileText, Plus, Loader2 } from "lucide-react";
+import { BookOpen, ChevronRight, Clock, FileText, Plus, Loader2, Home } from "lucide-react";
 
 const GAP_LEVEL_CONFIG: Record<string, { color: string; label: string }> = {
   critical: { color: "bg-red-100 text-red-700 border-red-200", label: "Critical" },
@@ -26,6 +26,17 @@ export default function SurveyHistory() {
 
   return (
     <div className="space-y-6">
+      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <button onClick={() => navigate("/")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <Home className="w-3.5 h-3.5" /><span>Home</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1 hover:text-foreground transition-colors">
+          <span>Dashboard</span>
+        </button>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <span className="text-foreground font-medium">Survey History</span>
+      </nav>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Survey History</h1>
