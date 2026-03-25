@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
   adminPermissions,
+  aiSettings,
   questions,
   recommendations,
   reports,
@@ -754,4 +755,45 @@ export async function saveAiGeneratedQuestions(
     .update(surveyConfigurations)
     .set({ aiGeneratedQuestions: questions, aiGeneratedAt: new Date() })
     .where(eq(surveyConfigurations.id, configId));
+}
+
+// ─── AI Settings ──────────────────────────────────────────────────────────────
+export async function getAiSettings() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(aiSettings).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertAiSettings(data: {
+  provider: string;
+  apiKey: string | null;
+  model: string;
+  baseUrl: string | null;
+  updatedBy: number;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(aiSettings).limit(1);
+  if (existing.length > 0) {
+    await db
+      .update(aiSettings)
+      .set({
+        provider: data.provider,
+        apiKey: data.apiKey,
+        model: data.model,
+        baseUrl: data.baseUrl,
+        updatedBy: data.updatedBy,
+      })
+      .where(eq(aiSettings.id, existing[0].id));
+  } else {
+    await db.insert(aiSettings).values({
+      provider: data.provider,
+      apiKey: data.apiKey,
+      model: data.model,
+      baseUrl: data.baseUrl,
+      isActive: true,
+      updatedBy: data.updatedBy,
+    });
+  }
 }

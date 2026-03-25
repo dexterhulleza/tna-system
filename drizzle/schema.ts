@@ -293,3 +293,19 @@ export const adminPermissions = mysqlTable("admin_permissions", {
 
 export type AdminPermission = typeof adminPermissions.$inferSelect;
 export type InsertAdminPermission = typeof adminPermissions.$inferInsert;
+
+// ─── AI Provider Settings ─────────────────────────────────────────────────────
+export const aiSettings = mysqlTable("ai_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  provider: varchar("provider", { length: 50 }).notNull().default("builtin"),
+  apiKey: text("apiKey"),
+  model: varchar("model", { length: 100 }).notNull().default("gpt-4o"),
+  baseUrl: varchar("baseUrl", { length: 500 }),
+  isActive: boolean("isActive").notNull().default(true),
+  updatedBy: int("updatedBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AiSettings = typeof aiSettings.$inferSelect;
+export type InsertAiSettings = typeof aiSettings.$inferInsert;

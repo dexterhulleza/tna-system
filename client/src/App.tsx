@@ -14,6 +14,7 @@ import AdminUsers from "./pages/admin/AdminUsers";
 import AdminQuestions from "./pages/admin/AdminQuestions";
 import AdminSectors from "./pages/admin/AdminSectors";
 import AdminReports from "./pages/admin/AdminReports";
+import AdminAISettings from "./pages/admin/AdminAISettings";
 import ManageGroups from "./pages/admin/ManageGroups";
 import SurveyConfiguration from "./pages/admin/SurveyConfiguration";
 import ProfileSetup from "./pages/ProfileSetup";
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/admin/reports" component={AdminReports} />
       <Route path="/admin/groups" component={ManageGroups} />
       <Route path="/admin/survey-config" component={SurveyConfiguration} />
+      <Route path="/admin/ai-settings" component={AdminAISettings} />
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

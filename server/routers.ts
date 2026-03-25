@@ -5,7 +5,10 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
+import { invokeAI, testAiConnection, getActiveAiSettings } from "./aiProvider";
 import {
+  getAiSettings,
+  upsertAiSettings,
   bulkDeactivateQuestions,
   bulkDeleteQuestions,
   createReport,
@@ -322,13 +325,12 @@ After the table, add:
 Write in a professional but accessible tone. Use actual data numbers from the survey results wherever possible. If data is limited, acknowledge this and provide recommendations based on the available information and industry best practices.`
         let aiAnalysis: string | null = null;
         try {
-          const llmResult = await invokeLLM({
+          aiAnalysis = await invokeAI({
             messages: [
               { role: "system", content: "You are a senior TESDA-aligned Training Needs Analysis specialist. Produce structured, comprehensive TNA reports following the TESDA/NTESDP framework. Write professionally but accessibly for HR managers, training officers, and government officials." },
               { role: "user", content: prompt },
             ],
           });
-          aiAnalysis = (llmResult.choices?.[0]?.message?.content as string) ?? null;
         } catch (err) {
           console.warn("[GroupAnalysis] LLM call failed:", err);
         }
@@ -724,47 +726,67 @@ Requirements:
 - Include questions that will directly feed into the Training Plan Output (priority, duration, delivery mode, expected outcomes)
 - Ensure questions are appropriate for the identified training beneficiaries (new entrants, existing workers, supervisors, trainers)`;
 
-          const response = await invokeLLM({
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            response_format: {
-              type: "json_schema",
-              json_schema: {
-                name: "tna_questions",
-                strict: true,
-                schema: {
-                  type: "object",
-                  properties: {
-                    questions: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          questionText: { type: "string" },
-                          category: { type: "string", enum: ["organizational", "job_task", "individual", "training_feasibility", "evaluation_success", "custom"] },
-                          questionType: { type: "string", enum: ["rating", "yes_no", "scale", "text", "multiple_choice"] },
-                          rationale: { type: "string" },
-                          accepted: { type: "boolean" },
+          // Check if we have a configured external AI provider
+          const aiSettingsRow = await getActiveAiSettings();
+          const useExternalAI = aiSettingsRow && aiSettingsRow.provider !== "builtin" && aiSettingsRow.apiKey;
+
+          let generatedQuestions: Array<{ questionText: string; category: string; questionType: string; rationale: string; accepted: boolean }>;
+
+          if (useExternalAI) {
+            // Use invokeAI which routes through the configured OpenAI provider
+            const jsonInstruction = `\n\nIMPORTANT: Return ONLY a valid JSON object with this exact structure: {"questions": [...]}. No markdown, no code fences, just raw JSON. Each question must have: questionText (string), category (one of: organizational|job_task|individual|training_feasibility|evaluation_success|custom), questionType (one of: rating|yes_no|scale|text|multiple_choice), rationale (string), accepted (boolean, always false).`;
+            const rawContent = await invokeAI({
+              messages: [
+                { role: "system", content: systemPrompt + jsonInstruction },
+                { role: "user", content: userPrompt },
+              ],
+            });
+            // Strip markdown code fences if present
+            const cleaned = rawContent.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+            const parsedExternal = JSON.parse(cleaned) as { questions: typeof generatedQuestions };
+            generatedQuestions = parsedExternal.questions;
+          } else {
+            // Use built-in LLM with structured JSON schema
+            const builtinResponse = await invokeLLM({
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt },
+              ],
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: "tna_questions",
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    properties: {
+                      questions: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            questionText: { type: "string" },
+                            category: { type: "string", enum: ["organizational", "job_task", "individual", "training_feasibility", "evaluation_success", "custom"] },
+                            questionType: { type: "string", enum: ["rating", "yes_no", "scale", "text", "multiple_choice"] },
+                            rationale: { type: "string" },
+                            accepted: { type: "boolean" },
+                          },
+                          required: ["questionText", "category", "questionType", "rationale", "accepted"],
+                          additionalProperties: false,
                         },
-                        required: ["questionText", "category", "questionType", "rationale", "accepted"],
-                        additionalProperties: false,
                       },
                     },
+                    required: ["questions"],
+                    additionalProperties: false,
                   },
-                  required: ["questions"],
-                  additionalProperties: false,
                 },
               },
-            },
-          });
-
-          const content = response.choices[0].message.content as string;
-          const parsed = JSON.parse(content) as { questions: Array<{ questionText: string; category: string; questionType: string; rationale: string; accepted: boolean }> };
-          const generatedQuestions = parsed.questions;
-
-          await saveAiGeneratedQuestions(config.id, generatedQuestions);
+            });
+            const rawBuiltin = builtinResponse.choices[0].message.content as string;
+            const parsedBuiltin = JSON.parse(rawBuiltin) as { questions: typeof generatedQuestions };
+            generatedQuestions = parsedBuiltin.questions;
+          }
+          await saveAiGeneratedQuestions(config.id, generatedQuestions!);
           return { questions: generatedQuestions, configId: config.id };
         }),
 
@@ -836,5 +858,62 @@ Requirements:
           return { success: true, inserted: rows.length };
         }),
     }),
+  // ─── AI Provider Configuration ──────────────────────────────────────────────
+  aiConfig: router({
+    getSettings: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const settings = await getAiSettings();
+        if (!settings) {
+          return { provider: "builtin", model: "gpt-4o", baseUrl: null, hasApiKey: false, updatedAt: null };
+        }
+        return {
+          provider: settings.provider,
+          model: settings.model,
+          baseUrl: settings.baseUrl,
+          hasApiKey: !!settings.apiKey,
+          updatedAt: settings.updatedAt,
+        };
+      }),
+    saveSettings: protectedProcedure
+      .input(
+        z.object({
+          provider: z.enum(["builtin", "openai", "custom"]),
+          apiKey: z.string().optional(),
+          model: z.string().min(1),
+          baseUrl: z.string().url().optional().or(z.literal("")),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await upsertAiSettings({
+          provider: input.provider,
+          apiKey: input.apiKey ?? null,
+          model: input.model,
+          baseUrl: input.baseUrl || null,
+          updatedBy: ctx.user.id,
+        });
+        return { success: true };
+      }),
+    testConnection: protectedProcedure
+      .input(
+        z.object({
+          provider: z.enum(["builtin", "openai", "custom"]),
+          apiKey: z.string().optional(),
+          model: z.string().min(1),
+          baseUrl: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const result = await testAiConnection(
+          input.provider,
+          input.apiKey ?? "",
+          input.model,
+          input.baseUrl
+        );
+        return result;
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;

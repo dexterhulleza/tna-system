@@ -126,3 +126,13 @@
 - [x] Update Group Analysis frontend to display all 9 sections with Training Plan Output as a structured table
 - [x] Add Export (Markdown download) and Regenerate buttons to Group Analysis
 - [x] Update explanation banner to describe TESDA/NTESDP 9-section framework
+
+## AI Provider Configuration (Mar 25 2026)
+- [x] DB: ai_settings table (provider, apiKey, model, baseUrl, isActive, updatedBy, updatedAt)
+- [x] Backend: tRPC procedures for AI settings (getSettings, saveSettings, testConnection)
+- [x] Backend: invokeAI() helper that uses configured OpenAI key if set, else falls back to built-in LLM
+- [x] Backend: wire group analysis (groupAnalysis procedure) to use invokeAI()
+- [x] Backend: wire question generation (generateQuestions procedure) to use invokeAI() with if/else fallback
+- [x] Frontend: Admin AI Settings page (/admin/ai-settings) with provider selector, API key input, model selector, base URL override, test connection button
+- [x] Frontend: Add "AI Settings" link to Admin Dashboard
+- [x] Tests: 7 vitest tests for AI settings procedures (27 total, all passing)

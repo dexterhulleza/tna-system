@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { Users, BookOpen, BarChart3, Settings, FileText, ChevronRight, Loader2, AlertTriangle, Tag, Sparkles } from "lucide-react";
+import { Users, BookOpen, BarChart3, Settings, FileText, ChevronRight, Loader2, AlertTriangle, Tag, Sparkles, Bot } from "lucide-react";
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
@@ -150,6 +150,18 @@ export default function AdminDashboard() {
                 </div>
                 <CardTitle className="font-display text-base mt-2">Survey Configuration</CardTitle>
                 <CardDescription className="text-xs">Define objectives and business goals per group, then generate AI-tailored TNA questions</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer border-primary/20" onClick={() => navigate("/admin/ai-settings")}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Bot className="w-5 h-5 text-primary" />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <CardTitle className="font-display text-base mt-2">AI Provider Settings</CardTitle>
+                <CardDescription className="text-xs">Configure OpenAI API key or custom AI provider for analysis and question generation</CardDescription>
               </CardHeader>
             </Card>
           </div>
