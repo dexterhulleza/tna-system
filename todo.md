@@ -150,3 +150,11 @@
 - [x] invokeAI(): uses invokeGeminiWithFallback, logs fallback usage to console
 - [x] testAiConnection(): on Gemini 429, reports success with fallback note instead of failure
 - [x] 27 tests passing, 0 TypeScript errors
+
+## Gemini Tier 1 Model Fix (Mar 26 2026)
+- [x] Diagnosed: gemini-2.0-flash is deprecated (404 "no longer available to new users"); only gemini-2.5-flash and gemini-2.5-pro work on Tier 1
+- [x] Updated GEMINI_FALLBACK_CHAIN to ["gemini-2.5-flash", "gemini-2.5-pro"]
+- [x] Extended invokeGeminiWithFallback to retry on 404 not-found/deprecated errors (not just quota 429)
+- [x] Updated default model to gemini-2.5-flash in aiProvider.ts and testAiConnection
+- [x] Updated AdminAISettings.tsx model dropdown to show only gemini-2.5-flash and gemini-2.5-pro
+- [x] 27 tests passing, 0 TypeScript errors

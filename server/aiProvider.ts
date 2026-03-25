@@ -6,8 +6,11 @@
  *   - "gemini"   → Google Gemini API with automatic multi-model fallback chain on quota errors
  *   - "custom"   → Any OpenAI-compatible endpoint (Azure, Together, Groq, Ollama…)
  *
- * Gemini fallback chain (on quota exhaustion):
- *   configured model → gemini-1.5-pro → gemini-1.5-flash → gemini-1.0-pro → built-in LLM
+ * Gemini fallback chain (on quota/deprecation):
+ *   configured model → gemini-2.5-flash → gemini-2.5-pro → built-in LLM
+ *
+ * Confirmed working on Tier 1 paid accounts (Mar 2026): gemini-2.5-flash, gemini-2.5-pro
+ * Deprecated for new users: gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro, gemini-1.0-pro
  */
 
 import OpenAI from "openai";
@@ -35,11 +38,16 @@ export interface LLMCallOptions {
 }
 
 /**
- * Ordered list of fallback models to try when the primary Gemini model hits quota.
+ * Ordered list of fallback models to try when the primary Gemini model hits quota or is unavailable.
  * Models are tried in order; the first one that succeeds is used.
  * If all fail, the system falls back to the built-in Manus LLM.
+ *
+ * Confirmed working on Tier 1 paid accounts (Mar 2026):
+ *   gemini-2.5-flash, gemini-2.5-pro
+ * Deprecated/removed (404 for new users):
+ *   gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro, gemini-1.0-pro
  */
-const GEMINI_FALLBACK_CHAIN = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"];
+const GEMINI_FALLBACK_CHAIN = ["gemini-2.5-flash", "gemini-2.5-pro"];
 
 /**
  * Returns true if the error is a Gemini quota-exhaustion (429 / RESOURCE_EXHAUSTED).
@@ -137,7 +145,7 @@ async function invokeGeminiWithFallback(
     ...GEMINI_FALLBACK_CHAIN.filter((m) => m !== primaryModel),
   ];
 
-  let lastQuotaError: any = null;
+  let lastError: any = null;
 
   for (const model of chain) {
     try {
@@ -149,14 +157,23 @@ async function invokeGeminiWithFallback(
         usedBuiltin: false,
       };
     } catch (err: any) {
-      if (isGeminiQuotaError(err)) {
-        lastQuotaError = err;
+      const raw: string = err?.message ?? String(err) ?? "";
+      const isRetryable =
+        isGeminiQuotaError(err) ||
+        raw.includes("404") ||
+        raw.includes("not found") ||
+        raw.includes("MODEL_NOT_FOUND") ||
+        raw.includes("no longer available");
+
+      if (isRetryable) {
+        lastError = err;
+        const isLast = model === chain[chain.length - 1];
         console.warn(
-          `[AI] Gemini quota exhausted for "${model}".${model !== chain[chain.length - 1] ? ` Trying next fallback…` : " All Gemini models exhausted."}`
+          `[AI] Gemini model "${model}" unavailable (quota or deprecated).${isLast ? " All Gemini models exhausted." : " Trying next fallback…"}`
         );
         continue; // try next model in chain
       }
-      // Non-quota error — surface with friendly message immediately
+      // Non-retryable error — surface with friendly message immediately
       throw new Error(parseGeminiError(err, model));
     }
   }
@@ -174,7 +191,7 @@ async function invokeGeminiWithFallback(
     return { text, modelUsed: "built-in", usedFallback: true, usedBuiltin: true };
   } catch (builtinErr: any) {
     // Both Gemini chain and built-in failed — surface a combined error
-    const quotaMsg = parseGeminiError(lastQuotaError, primaryModel);
+    const quotaMsg = parseGeminiError(lastError, primaryModel);
     throw new Error(
       `${quotaMsg} Built-in LLM fallback also failed: ${builtinErr?.message ?? "Unknown error"}. Please try again later or switch to a different AI provider in Admin → AI Settings.`
     );
@@ -202,9 +219,9 @@ function parseGeminiError(err: any, model: string): string {
     return "Invalid Gemini API key. Verify your key at aistudio.google.com/apikey.";
   }
 
-  // 404 / model not found
-  if (raw.includes("404") || raw.includes("not found") || raw.includes("MODEL_NOT_FOUND")) {
-    return `Model not found: "${model}". Try gemini-1.5-pro, gemini-1.5-flash, or gemini-2.0-flash.`;
+  // 404 / model not found or deprecated
+  if (raw.includes("404") || raw.includes("not found") || raw.includes("MODEL_NOT_FOUND") || raw.includes("no longer available")) {
+    return `Model "${model}" is not available on your account. Use gemini-2.5-flash or gemini-2.5-pro (confirmed working for Tier 1 paid accounts).`;
   }
 
   // Network / DNS
@@ -229,7 +246,7 @@ export async function invokeAI(options: LLMCallOptions): Promise<string> {
   if (settings && settings.provider !== "builtin" && settings.apiKey) {
     // ── Gemini (with multi-model fallback chain) ───────────────────────────
     if (settings.provider === "gemini") {
-      const primaryModel = settings.model || "gemini-1.5-pro";
+      const primaryModel = settings.model || "gemini-2.5-flash";
       const { text, modelUsed, usedFallback, usedBuiltin } = await invokeGeminiWithFallback(
         settings.apiKey,
         primaryModel,
@@ -302,7 +319,7 @@ export async function testAiConnection(
     if (!apiKey) {
       return { success: false, message: "API key is required for Gemini." };
     }
-    const primaryModel = model || "gemini-1.5-pro";
+    const primaryModel = model || "gemini-2.5-flash";
     const testOptions: LLMCallOptions = {
       messages: [{ role: "user", content: 'Reply with exactly: {"status":"ok"}' }],
     };
@@ -317,7 +334,7 @@ export async function testAiConnection(
       if (usedBuiltin) {
         return {
           success: true,
-          message: `API key is valid but all Gemini models (${[primaryModel, ...GEMINI_FALLBACK_CHAIN].join(", ")}) have exhausted their quota. The system will use the built-in LLM as a final fallback for AI analysis.`,
+          message: `API key is valid but all Gemini models (${[primaryModel, ...GEMINI_FALLBACK_CHAIN.filter(m => m !== primaryModel)].join(", ")}) are unavailable (quota or deprecated). The system will use the built-in LLM as a final fallback for AI analysis.`,
           modelUsed: "built-in",
         };
       }

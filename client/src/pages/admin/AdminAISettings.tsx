@@ -52,8 +52,8 @@ const PROVIDER_OPTIONS: {
   {
     value: "gemini",
     label: "Google Gemini",
-    description: "Use Google Gemini API (Gemini 2.0 Flash, Gemini 1.5 Pro, etc.)",
-    models: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"],
+    description: "Use Google Gemini API (Gemini 2.5 Flash, Gemini 2.5 Pro — Tier 1 paid accounts)",
+    models: ["gemini-2.5-flash", "gemini-2.5-pro"],
     keyPlaceholder: "AIza...",
     keyLink: { label: "aistudio.google.com/apikey", href: "https://aistudio.google.com/apikey" },
   },
