@@ -143,3 +143,10 @@
 - [x] Update routers.ts zod enum for provider to include "gemini"
 - [x] Update AdminAISettings.tsx frontend with Gemini option, model list, and API key link
 - [x] Run tests and verify TypeScript (27 tests passing, 0 TS errors)
+
+## Gemini Auto-Fallback (Mar 25 2026)
+- [x] isGeminiQuotaError() helper to detect 429/RESOURCE_EXHAUSTED errors
+- [x] invokeGeminiWithFallback(): on quota error, auto-retry with gemini-1.5-flash; propagate error only if fallback also fails
+- [x] invokeAI(): uses invokeGeminiWithFallback, logs fallback usage to console
+- [x] testAiConnection(): on Gemini 429, reports success with fallback note instead of failure
+- [x] 27 tests passing, 0 TypeScript errors

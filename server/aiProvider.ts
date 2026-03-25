@@ -3,7 +3,7 @@
  * Routes LLM calls through the admin-configured provider:
  *   - "builtin"  → Manus built-in LLM
  *   - "openai"   → OpenAI API (GPT-4o, GPT-4 Turbo, etc.)
- *   - "gemini"   → Google Gemini API (gemini-1.5-pro, gemini-2.0-flash, etc.)
+ *   - "gemini"   → Google Gemini API with automatic fallback to gemini-1.5-flash on quota errors
  *   - "custom"   → Any OpenAI-compatible endpoint (Azure, Together, Groq, Ollama…)
  */
 
@@ -29,6 +29,22 @@ export interface LLMCallOptions {
       schema: object;
     };
   };
+}
+
+/** The model used as automatic fallback when the primary Gemini model hits quota. */
+const GEMINI_FALLBACK_MODEL = "gemini-1.5-flash";
+
+/**
+ * Returns true if the error is a Gemini quota-exhaustion (429 / RESOURCE_EXHAUSTED).
+ */
+function isGeminiQuotaError(err: any): boolean {
+  const raw: string = err?.message ?? String(err) ?? "";
+  return (
+    raw.includes("429") ||
+    raw.includes("Too Many Requests") ||
+    raw.includes("RESOURCE_EXHAUSTED") ||
+    raw.includes("Quota exceeded")
+  );
 }
 
 /**
@@ -62,7 +78,7 @@ async function invokeGemini(
 ): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  // Gemini model names: strip "models/" prefix if present
+  // Strip "models/" prefix if present
   const modelName = model.replace(/^models\//, "");
 
   const geminiModel = genAI.getGenerativeModel({
@@ -82,7 +98,6 @@ async function invokeGemini(
     parts: [{ text: m.content }],
   }));
 
-  // Last message is the current user prompt
   const lastMsg = conversationMsgs[conversationMsgs.length - 1];
   const userPrompt = lastMsg?.content ?? "";
 
@@ -98,26 +113,106 @@ async function invokeGemini(
 }
 
 /**
+ * Invoke Gemini with automatic fallback to GEMINI_FALLBACK_MODEL on quota errors.
+ * Returns { text, modelUsed, usedFallback } so callers can log/surface the fallback.
+ */
+async function invokeGeminiWithFallback(
+  apiKey: string,
+  primaryModel: string,
+  messages: LLMMessage[],
+  jsonMode: boolean
+): Promise<{ text: string; modelUsed: string; usedFallback: boolean }> {
+  try {
+    const text = await invokeGemini(apiKey, primaryModel, messages, jsonMode);
+    return { text, modelUsed: primaryModel, usedFallback: false };
+  } catch (primaryErr: any) {
+    if (!isGeminiQuotaError(primaryErr)) {
+      // Non-quota error — re-throw with friendly message
+      throw new Error(parseGeminiError(primaryErr, primaryModel));
+    }
+
+    // Quota error on primary model — try fallback (unless it's already the fallback)
+    if (primaryModel === GEMINI_FALLBACK_MODEL) {
+      throw new Error(parseGeminiError(primaryErr, primaryModel));
+    }
+
+    console.warn(
+      `[AI] Gemini quota exhausted for "${primaryModel}". Retrying with fallback "${GEMINI_FALLBACK_MODEL}"…`
+    );
+
+    try {
+      const text = await invokeGemini(apiKey, GEMINI_FALLBACK_MODEL, messages, jsonMode);
+      return { text, modelUsed: GEMINI_FALLBACK_MODEL, usedFallback: true };
+    } catch (fallbackErr: any) {
+      // Both models failed — surface a combined message
+      const fallbackMsg = parseGeminiError(fallbackErr, GEMINI_FALLBACK_MODEL);
+      throw new Error(
+        `Primary model "${primaryModel}" quota exhausted. Fallback "${GEMINI_FALLBACK_MODEL}" also failed: ${fallbackMsg}`
+      );
+    }
+  }
+}
+
+/**
+ * Parse a Gemini SDK error into a friendly, actionable message.
+ */
+function parseGeminiError(err: any, model: string): string {
+  const raw: string = err?.message ?? String(err) ?? "Unknown error";
+
+  // 429 – quota exhausted
+  if (isGeminiQuotaError(err)) {
+    const retryMatch = raw.match(/retry in ([\d.]+s)/i);
+    const retryHint = retryMatch ? ` Retry in ${retryMatch[1]}.` : " Please wait before retrying.";
+    if (raw.includes("free_tier") || raw.includes("FreeTier")) {
+      return `Free-tier quota exhausted for model "${model}".${retryHint} To continue, enable billing at console.cloud.google.com or switch to a model with remaining free quota (e.g. gemini-1.5-flash).`;
+    }
+    return `API quota exceeded for model "${model}".${retryHint} Check your usage at ai.dev/rate-limit.`;
+  }
+
+  // 401 / API key invalid
+  if (raw.includes("API_KEY_INVALID") || raw.includes("API key not valid") || raw.includes("401")) {
+    return "Invalid Gemini API key. Verify your key at aistudio.google.com/apikey.";
+  }
+
+  // 404 / model not found
+  if (raw.includes("404") || raw.includes("not found") || raw.includes("MODEL_NOT_FOUND")) {
+    return `Model not found: "${model}". Try gemini-1.5-pro, gemini-1.5-flash, or gemini-2.0-flash.`;
+  }
+
+  // Network / DNS
+  if (raw.includes("ECONNREFUSED") || raw.includes("ENOTFOUND") || raw.includes("fetch")) {
+    return "Cannot reach generativelanguage.googleapis.com. Check your network or firewall settings.";
+  }
+
+  // Generic fallback — trim to first 200 chars
+  const brief = raw.length > 200 ? raw.slice(0, 200) + "…" : raw;
+  return `Gemini error: ${brief}`;
+}
+
+/**
  * Invoke LLM using the configured provider.
- * Priority: configured external key → built-in Manus LLM
+ * For Gemini, automatically falls back to gemini-1.5-flash on quota errors.
  */
 export async function invokeAI(options: LLMCallOptions): Promise<string> {
   const settings = await getActiveAiSettings();
   const isJsonMode = !!options.response_format;
 
   if (settings && settings.provider !== "builtin" && settings.apiKey) {
-    // ── Gemini ─────────────────────────────────────────────────────────────
+    // ── Gemini (with auto-fallback) ────────────────────────────────────────
     if (settings.provider === "gemini") {
-      try {
-        return await invokeGemini(
-          settings.apiKey,
-          settings.model || "gemini-1.5-pro",
-          options.messages,
-          isJsonMode
+      const primaryModel = settings.model || "gemini-1.5-pro";
+      const { text, modelUsed, usedFallback } = await invokeGeminiWithFallback(
+        settings.apiKey,
+        primaryModel,
+        options.messages,
+        isJsonMode
+      );
+      if (usedFallback) {
+        console.info(
+          `[AI] Used fallback model "${modelUsed}" because "${primaryModel}" quota was exhausted.`
         );
-      } catch (err: any) {
-        throw new Error(parseGeminiError(err, settings.model || "gemini-1.5-pro"));
       }
+      return text;
     }
 
     // ── OpenAI / Custom OpenAI-compatible ──────────────────────────────────
@@ -151,45 +246,8 @@ export async function invokeAI(options: LLMCallOptions): Promise<string> {
 }
 
 /**
- * Parse a Gemini SDK error into a friendly, actionable message.
- */
-function parseGeminiError(err: any, model: string): string {
-  const raw: string = err?.message ?? String(err) ?? "Unknown error";
-
-  // 429 – quota exhausted
-  if (raw.includes("429") || raw.includes("Too Many Requests") || raw.includes("RESOURCE_EXHAUSTED") || raw.includes("Quota exceeded")) {
-    // Try to extract retry delay
-    const retryMatch = raw.match(/retry in ([\d.]+s)/i);
-    const retryHint = retryMatch ? ` Retry in ${retryMatch[1]}.` : " Please wait before retrying.";
-    // Free-tier vs paid quota
-    if (raw.includes("free_tier") || raw.includes("FreeTier")) {
-      return `Free-tier quota exhausted for model "${model}".${retryHint} To continue, enable billing at console.cloud.google.com or switch to a model with remaining free quota (e.g. gemini-1.5-flash).`;
-    }
-    return `API quota exceeded for model "${model}".${retryHint} Check your usage at ai.dev/rate-limit.`;
-  }
-
-  // 401 / API key invalid
-  if (raw.includes("API_KEY_INVALID") || raw.includes("API key not valid") || raw.includes("401")) {
-    return "Invalid Gemini API key. Verify your key at aistudio.google.com/apikey.";
-  }
-
-  // 404 / model not found
-  if (raw.includes("404") || raw.includes("not found") || raw.includes("MODEL_NOT_FOUND")) {
-    return `Model not found: "${model}". Try gemini-1.5-pro, gemini-1.5-flash, or gemini-2.0-flash.`;
-  }
-
-  // Network / DNS
-  if (raw.includes("ECONNREFUSED") || raw.includes("ENOTFOUND") || raw.includes("fetch")) {
-    return "Cannot reach generativelanguage.googleapis.com. Check your network or firewall settings.";
-  }
-
-  // Generic fallback — trim the verbose raw message to first 200 chars
-  const brief = raw.length > 200 ? raw.slice(0, 200) + "…" : raw;
-  return `Gemini error: ${brief}`;
-}
-
-/**
  * Test a connection with the given settings (without saving).
+ * For Gemini, if the primary model hits quota, automatically tests the fallback model.
  */
 export async function testAiConnection(
   provider: string,
@@ -209,25 +267,33 @@ export async function testAiConnection(
     }
   }
 
-  // ── Gemini ─────────────────────────────────────────────────────────────────
+  // ── Gemini (with auto-fallback on quota) ───────────────────────────────────
   if (provider === "gemini") {
     if (!apiKey) {
       return { success: false, message: "API key is required for Gemini." };
     }
+    const primaryModel = model || "gemini-1.5-pro";
     try {
-      const text = await invokeGemini(
+      const { modelUsed, usedFallback } = await invokeGeminiWithFallback(
         apiKey,
-        model || "gemini-1.5-pro",
+        primaryModel,
         [{ role: "user", content: 'Reply with exactly: {"status":"ok"}' }],
         false
       );
+      if (usedFallback) {
+        return {
+          success: true,
+          message: `API key is valid. Note: "${primaryModel}" quota is exhausted — automatically using fallback model "${GEMINI_FALLBACK_MODEL}". AI analysis will use "${GEMINI_FALLBACK_MODEL}" until the quota resets or you switch models.`,
+          modelUsed,
+        };
+      }
       return {
         success: true,
-        message: `Gemini connection successful. Model: ${model}`,
-        modelUsed: model,
+        message: `Gemini connection successful. Model: ${modelUsed}`,
+        modelUsed,
       };
     } catch (err: any) {
-      return { success: false, message: parseGeminiError(err, model) };
+      return { success: false, message: err.message };
     }
   }
 
