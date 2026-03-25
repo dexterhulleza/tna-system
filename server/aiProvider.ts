@@ -108,12 +108,16 @@ export async function invokeAI(options: LLMCallOptions): Promise<string> {
   if (settings && settings.provider !== "builtin" && settings.apiKey) {
     // ── Gemini ─────────────────────────────────────────────────────────────
     if (settings.provider === "gemini") {
-      return invokeGemini(
-        settings.apiKey,
-        settings.model || "gemini-1.5-pro",
-        options.messages,
-        isJsonMode
-      );
+      try {
+        return await invokeGemini(
+          settings.apiKey,
+          settings.model || "gemini-1.5-pro",
+          options.messages,
+          isJsonMode
+        );
+      } catch (err: any) {
+        throw new Error(parseGeminiError(err, settings.model || "gemini-1.5-pro"));
+      }
     }
 
     // ── OpenAI / Custom OpenAI-compatible ──────────────────────────────────
@@ -144,6 +148,44 @@ export async function invokeAI(options: LLMCallOptions): Promise<string> {
   });
 
   return (result.choices?.[0]?.message?.content as string) ?? "";
+}
+
+/**
+ * Parse a Gemini SDK error into a friendly, actionable message.
+ */
+function parseGeminiError(err: any, model: string): string {
+  const raw: string = err?.message ?? String(err) ?? "Unknown error";
+
+  // 429 – quota exhausted
+  if (raw.includes("429") || raw.includes("Too Many Requests") || raw.includes("RESOURCE_EXHAUSTED") || raw.includes("Quota exceeded")) {
+    // Try to extract retry delay
+    const retryMatch = raw.match(/retry in ([\d.]+s)/i);
+    const retryHint = retryMatch ? ` Retry in ${retryMatch[1]}.` : " Please wait before retrying.";
+    // Free-tier vs paid quota
+    if (raw.includes("free_tier") || raw.includes("FreeTier")) {
+      return `Free-tier quota exhausted for model "${model}".${retryHint} To continue, enable billing at console.cloud.google.com or switch to a model with remaining free quota (e.g. gemini-1.5-flash).`;
+    }
+    return `API quota exceeded for model "${model}".${retryHint} Check your usage at ai.dev/rate-limit.`;
+  }
+
+  // 401 / API key invalid
+  if (raw.includes("API_KEY_INVALID") || raw.includes("API key not valid") || raw.includes("401")) {
+    return "Invalid Gemini API key. Verify your key at aistudio.google.com/apikey.";
+  }
+
+  // 404 / model not found
+  if (raw.includes("404") || raw.includes("not found") || raw.includes("MODEL_NOT_FOUND")) {
+    return `Model not found: "${model}". Try gemini-1.5-pro, gemini-1.5-flash, or gemini-2.0-flash.`;
+  }
+
+  // Network / DNS
+  if (raw.includes("ECONNREFUSED") || raw.includes("ENOTFOUND") || raw.includes("fetch")) {
+    return "Cannot reach generativelanguage.googleapis.com. Check your network or firewall settings.";
+  }
+
+  // Generic fallback — trim the verbose raw message to first 200 chars
+  const brief = raw.length > 200 ? raw.slice(0, 200) + "…" : raw;
+  return `Gemini error: ${brief}`;
 }
 
 /**
@@ -185,14 +227,7 @@ export async function testAiConnection(
         modelUsed: model,
       };
     } catch (err: any) {
-      const msg = err?.message ?? "Unknown error";
-      if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
-        return { success: false, message: "Invalid Gemini API key. Check your key at aistudio.google.com." };
-      }
-      if (msg.includes("404") || msg.includes("not found")) {
-        return { success: false, message: `Model not found: "${model}". Try gemini-1.5-pro or gemini-2.0-flash.` };
-      }
-      return { success: false, message: `Gemini connection failed: ${msg}` };
+      return { success: false, message: parseGeminiError(err, model) };
     }
   }
 
