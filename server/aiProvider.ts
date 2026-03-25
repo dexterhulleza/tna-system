@@ -1,10 +1,14 @@
 /**
  * AI Provider Helper
- * Routes LLM calls through the admin-configured provider (OpenAI, custom OpenAI-compatible)
- * or falls back to the built-in Manus LLM if no external provider is configured.
+ * Routes LLM calls through the admin-configured provider:
+ *   - "builtin"  → Manus built-in LLM
+ *   - "openai"   → OpenAI API (GPT-4o, GPT-4 Turbo, etc.)
+ *   - "gemini"   → Google Gemini API (gemini-1.5-pro, gemini-2.0-flash, etc.)
+ *   - "custom"   → Any OpenAI-compatible endpoint (Azure, Together, Groq, Ollama…)
  */
 
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { invokeLLM } from "./_core/llm";
 import { getDb } from "./db";
 import { aiSettings } from "../drizzle/schema";
@@ -47,14 +51,72 @@ export async function getActiveAiSettings() {
 }
 
 /**
+ * Call Gemini API with the given messages.
+ * Gemini uses a different SDK so we convert the OpenAI-style message array.
+ */
+async function invokeGemini(
+  apiKey: string,
+  model: string,
+  messages: LLMMessage[],
+  jsonMode: boolean
+): Promise<string> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  // Gemini model names: strip "models/" prefix if present
+  const modelName = model.replace(/^models\//, "");
+
+  const geminiModel = genAI.getGenerativeModel({
+    model: modelName,
+    ...(jsonMode
+      ? { generationConfig: { responseMimeType: "application/json" } }
+      : {}),
+  });
+
+  // Separate system instruction from conversation history
+  const systemMsg = messages.find((m) => m.role === "system");
+  const conversationMsgs = messages.filter((m) => m.role !== "system");
+
+  // Build Gemini history (all but the last user message)
+  const history = conversationMsgs.slice(0, -1).map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  // Last message is the current user prompt
+  const lastMsg = conversationMsgs[conversationMsgs.length - 1];
+  const userPrompt = lastMsg?.content ?? "";
+
+  const chat = geminiModel.startChat({
+    history,
+    ...(systemMsg
+      ? { systemInstruction: { role: "user", parts: [{ text: systemMsg.content }] } }
+      : {}),
+  });
+
+  const result = await chat.sendMessage(userPrompt);
+  return result.response.text();
+}
+
+/**
  * Invoke LLM using the configured provider.
- * Priority: configured OpenAI key → built-in Manus LLM
+ * Priority: configured external key → built-in Manus LLM
  */
 export async function invokeAI(options: LLMCallOptions): Promise<string> {
   const settings = await getActiveAiSettings();
+  const isJsonMode = !!options.response_format;
 
-  // Use configured external provider if available
   if (settings && settings.provider !== "builtin" && settings.apiKey) {
+    // ── Gemini ─────────────────────────────────────────────────────────────
+    if (settings.provider === "gemini") {
+      return invokeGemini(
+        settings.apiKey,
+        settings.model || "gemini-1.5-pro",
+        options.messages,
+        isJsonMode
+      );
+    }
+
+    // ── OpenAI / Custom OpenAI-compatible ──────────────────────────────────
     const client = new OpenAI({
       apiKey: settings.apiKey,
       baseURL: settings.baseUrl || undefined,
@@ -73,7 +135,7 @@ export async function invokeAI(options: LLMCallOptions): Promise<string> {
     return response.choices[0]?.message?.content ?? "";
   }
 
-  // Fall back to built-in Manus LLM
+  // ── Built-in Manus LLM (fallback) ─────────────────────────────────────────
   const result = await invokeLLM({
     messages: options.messages,
     ...(options.response_format
@@ -93,21 +155,48 @@ export async function testAiConnection(
   model: string,
   baseUrl?: string
 ): Promise<{ success: boolean; message: string; modelUsed?: string }> {
+  // ── Built-in ───────────────────────────────────────────────────────────────
   if (provider === "builtin") {
     try {
-      const result = await invokeLLM({
-        messages: [
-          { role: "user", content: 'Reply with exactly: {"status":"ok"}' },
-        ],
+      await invokeLLM({
+        messages: [{ role: "user", content: 'Reply with exactly: {"status":"ok"}' }],
       });
-      const content = result.choices?.[0]?.message?.content ?? "";
       return { success: true, message: "Built-in LLM is working.", modelUsed: "built-in" };
     } catch (err: any) {
       return { success: false, message: `Built-in LLM error: ${err?.message ?? "Unknown error"}` };
     }
   }
 
-  // Test OpenAI-compatible provider
+  // ── Gemini ─────────────────────────────────────────────────────────────────
+  if (provider === "gemini") {
+    if (!apiKey) {
+      return { success: false, message: "API key is required for Gemini." };
+    }
+    try {
+      const text = await invokeGemini(
+        apiKey,
+        model || "gemini-1.5-pro",
+        [{ role: "user", content: 'Reply with exactly: {"status":"ok"}' }],
+        false
+      );
+      return {
+        success: true,
+        message: `Gemini connection successful. Model: ${model}`,
+        modelUsed: model,
+      };
+    } catch (err: any) {
+      const msg = err?.message ?? "Unknown error";
+      if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+        return { success: false, message: "Invalid Gemini API key. Check your key at aistudio.google.com." };
+      }
+      if (msg.includes("404") || msg.includes("not found")) {
+        return { success: false, message: `Model not found: "${model}". Try gemini-1.5-pro or gemini-2.0-flash.` };
+      }
+      return { success: false, message: `Gemini connection failed: ${msg}` };
+    }
+  }
+
+  // ── OpenAI / Custom OpenAI-compatible ──────────────────────────────────────
   try {
     const client = new OpenAI({
       apiKey,
@@ -120,7 +209,6 @@ export async function testAiConnection(
       max_tokens: 20,
     });
 
-    const content = response.choices[0]?.message?.content ?? "";
     return {
       success: true,
       message: `Connection successful. Model: ${response.model}`,
@@ -128,7 +216,6 @@ export async function testAiConnection(
     };
   } catch (err: any) {
     const msg = err?.message ?? "Unknown error";
-    // Provide friendly error messages
     if (msg.includes("401") || msg.includes("Incorrect API key") || msg.includes("invalid_api_key")) {
       return { success: false, message: "Invalid API key. Please check your OpenAI API key." };
     }

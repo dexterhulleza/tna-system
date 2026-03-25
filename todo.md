@@ -136,3 +136,10 @@
 - [x] Frontend: Admin AI Settings page (/admin/ai-settings) with provider selector, API key input, model selector, base URL override, test connection button
 - [x] Frontend: Add "AI Settings" link to Admin Dashboard
 - [x] Tests: 7 vitest tests for AI settings procedures (27 total, all passing)
+
+## Gemini AI Provider (Mar 25 2026)
+- [x] Install @google/generative-ai npm package
+- [x] Update aiProvider.ts to call Gemini API when provider = "gemini"
+- [x] Update routers.ts zod enum for provider to include "gemini"
+- [x] Update AdminAISettings.tsx frontend with Gemini option, model list, and API key link
+- [x] Run tests and verify TypeScript (27 tests passing, 0 TS errors)

@@ -24,7 +24,17 @@ import {
   EyeOff,
 } from "lucide-react";
 
-const PROVIDER_OPTIONS = [
+type ProviderValue = "builtin" | "openai" | "gemini" | "custom";
+
+const PROVIDER_OPTIONS: {
+  value: ProviderValue;
+  label: string;
+  description: string;
+  models: string[];
+  keyPlaceholder?: string;
+  keyLink?: { label: string; href: string };
+  showBaseUrl?: boolean;
+}[] = [
   {
     value: "builtin",
     label: "Built-in LLM (Default)",
@@ -36,19 +46,31 @@ const PROVIDER_OPTIONS = [
     label: "OpenAI",
     description: "Use your own OpenAI API key (GPT-4o, GPT-4 Turbo, GPT-3.5, etc.)",
     models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+    keyPlaceholder: "sk-...",
+    keyLink: { label: "platform.openai.com/api-keys", href: "https://platform.openai.com/api-keys" },
+  },
+  {
+    value: "gemini",
+    label: "Google Gemini",
+    description: "Use Google Gemini API (Gemini 2.0 Flash, Gemini 1.5 Pro, etc.)",
+    models: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"],
+    keyPlaceholder: "AIza...",
+    keyLink: { label: "aistudio.google.com/apikey", href: "https://aistudio.google.com/apikey" },
   },
   {
     value: "custom",
     label: "Custom / OpenAI-Compatible",
     description: "Use any OpenAI-compatible API (Azure OpenAI, Together AI, Groq, Ollama, etc.)",
     models: ["gpt-4o", "gpt-4-turbo", "llama-3-70b", "mixtral-8x7b", "custom"],
+    keyPlaceholder: "Your API key",
+    showBaseUrl: true,
   },
 ];
 
 export default function AdminAISettings() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
-  const [provider, setProvider] = useState<"builtin" | "openai" | "custom">("builtin");
+  const [provider, setProvider] = useState<ProviderValue>("builtin");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gpt-4o");
   const [baseUrl, setBaseUrl] = useState("");
@@ -84,10 +106,9 @@ export default function AdminAISettings() {
   // Load saved settings into form
   useEffect(() => {
     if (settings) {
-      setProvider(settings.provider as "builtin" | "openai" | "custom");
+      setProvider(settings.provider as ProviderValue);
       setModel(settings.model || "gpt-4o");
       setBaseUrl(settings.baseUrl || "");
-      // Don't load the API key value for security — only show if one is set
     }
   }, [settings]);
 
@@ -95,8 +116,18 @@ export default function AdminAISettings() {
   const modelOptions = selectedProvider?.models ?? ["gpt-4o"];
   const isBuiltin = provider === "builtin";
   const isCustomModel = model === "custom";
-
   const effectiveModel = isCustomModel ? customModel : model;
+
+  const handleProviderChange = (val: ProviderValue) => {
+    setProvider(val);
+    setTestResult(null);
+    const opt = PROVIDER_OPTIONS.find((p) => p.value === val);
+    if (val === "builtin") {
+      setModel("built-in");
+    } else if (opt?.models[0]) {
+      setModel(opt.models[0]);
+    }
+  };
 
   const handleSave = () => {
     if (!isBuiltin && !apiKey && !settings?.hasApiKey) {
@@ -160,7 +191,7 @@ export default function AdminAISettings() {
               <Info className="h-5 w-5 text-blue-400 mt-0.5 shrink-0" />
               <div className="text-sm text-muted-foreground">
                 <p className="font-medium text-foreground mb-1">Configure the AI engine for TNA analysis and question generation</p>
-                <p>By default, the system uses the built-in Manus LLM. You can switch to your own OpenAI account or any OpenAI-compatible provider for more control, higher rate limits, or specific model access.</p>
+                <p>Choose between the built-in Manus LLM, your own OpenAI account, Google Gemini, or any OpenAI-compatible provider. The selected provider will be used for all AI features including Group Analysis reports and survey question generation.</p>
               </div>
             </div>
           </CardContent>
@@ -212,15 +243,8 @@ export default function AdminAISettings() {
                 {PROVIDER_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => {
-                      setProvider(opt.value as "builtin" | "openai" | "custom");
-                      setTestResult(null);
-                      if (opt.value === "builtin") {
-                        setModel("built-in");
-                      } else if (opt.models[0]) {
-                        setModel(opt.models[0]);
-                      }
-                    }}
+                    type="button"
+                    onClick={() => handleProviderChange(opt.value)}
                     className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
                       provider === opt.value
                         ? "border-primary bg-primary/5"
@@ -255,7 +279,7 @@ export default function AdminAISettings() {
                   <Input
                     id="apiKey"
                     type={showApiKey ? "text" : "password"}
-                    placeholder={settings?.hasApiKey ? "••••••••••••••••••••••••••••••••" : "sk-..."}
+                    placeholder={settings?.hasApiKey ? "••••••••••••••••••••••••••••••••" : (selectedProvider?.keyPlaceholder ?? "Your API key")}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     className="pr-10 font-mono text-sm"
@@ -268,11 +292,16 @@ export default function AdminAISettings() {
                     {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {provider === "openai" && (
+                {selectedProvider?.keyLink && (
                   <p className="text-xs text-muted-foreground">
                     Get your API key from{" "}
-                    <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                      platform.openai.com/api-keys
+                    <a
+                      href={selectedProvider.keyLink.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {selectedProvider.keyLink.label}
                     </a>
                   </p>
                 )}
@@ -306,8 +335,8 @@ export default function AdminAISettings() {
               </div>
             )}
 
-            {/* Base URL (for custom provider) */}
-            {provider === "custom" && (
+            {/* Base URL (for custom provider only) */}
+            {selectedProvider?.showBaseUrl && (
               <div className="space-y-2">
                 <Label htmlFor="baseUrl">Base URL</Label>
                 <Input
@@ -390,7 +419,7 @@ export default function AdminAISettings() {
                 <p className="font-medium text-foreground">Important notes</p>
                 <p>API keys are stored securely in the database. Only admins can view or change these settings.</p>
                 <p>The configured provider will be used for all AI features: Group Analysis reports and AI-generated survey questions.</p>
-                <p>If the external provider fails, the system will log the error — it will <strong>not</strong> automatically fall back to the built-in LLM when an external key is configured.</p>
+                <p>If the external provider fails, the system will log the error. It will <strong>not</strong> automatically fall back to the built-in LLM when an external key is configured.</p>
               </div>
             </div>
           </CardContent>

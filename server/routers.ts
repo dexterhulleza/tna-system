@@ -878,7 +878,7 @@ Requirements:
     saveSettings: protectedProcedure
       .input(
         z.object({
-          provider: z.enum(["builtin", "openai", "custom"]),
+          provider: z.enum(["builtin", "openai", "gemini", "custom"]),
           apiKey: z.string().optional(),
           model: z.string().min(1),
           baseUrl: z.string().url().optional().or(z.literal("")),
@@ -898,7 +898,7 @@ Requirements:
     testConnection: protectedProcedure
       .input(
         z.object({
-          provider: z.enum(["builtin", "openai", "custom"]),
+          provider: z.enum(["builtin", "openai", "gemini", "custom"]),
           apiKey: z.string().optional(),
           model: z.string().min(1),
           baseUrl: z.string().optional(),
