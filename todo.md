@@ -170,3 +170,10 @@
 - [x] Frontend: Export All button for all generated sections as a single Markdown file
 - [x] Frontend: Updated explanation banner describing credit-efficient workflow
 - [x] 27 tests passing, 0 TypeScript errors
+
+## HR Workflow UX Improvements (Apr 13 2026)
+- [x] Survey Readiness Checklist: dashboard widget on Admin Dashboard showing 7-phase completion status with progress bar and direct action links
+- [x] HR Officer TNA Workflow Recommendation Document (PDF + Markdown)
+- [ ] Staff CSV/Excel bulk import: allow HR Officers to upload staff profiles (name, position, department, duties) to pre-populate respondent data
+- [ ] Survey QR Code / shareable link per group: generate a direct link and QR code for each group's survey that pre-selects the group
+- [ ] TNA Setup Wizard page: guided step-by-step flow for new HR Officers to complete all 7 phases from a single page

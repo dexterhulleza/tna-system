@@ -772,6 +772,64 @@ Write in a professional but accessible tone. Use actual data numbers from the su
   // ─── Admin ─────────────────────────────────────────────────────────────────
   admin: router({
     dashboard: adminProcedure.query(() => getDashboardStats()),
+    readinessChecklist: adminProcedure.query(async () => {
+      const db_module = await import("./db");
+      const { getDb } = await import("./db");
+      const db = await getDb();
+      const { sql: drizzleSql, eq } = await import("drizzle-orm");
+      const schema = await import("../drizzle/schema");
+      // Phase 1: AI provider configured?
+      const aiSettings = await getActiveAiSettings();
+      const aiConfigured = !!(aiSettings && aiSettings.provider !== "builtin" && aiSettings.apiKey);
+      // Phase 2: At least one active group?
+      const groups = await db_module.getAllSurveyGroups();
+      const activeGroups = groups.filter((g: { isActive: boolean }) => g.isActive);
+      const hasGroups = activeGroups.length > 0;
+      // Phase 3: At least one group has a survey config?
+      let configuredGroups = 0;
+      if (db) {
+        const [configCount] = await db.select({ count: drizzleSql<number>`count(distinct groupId)` }).from(schema.surveyConfigurations);
+        configuredGroups = Number(configCount?.count ?? 0);
+      }
+      const hasConfigs = configuredGroups > 0;
+      // Phase 4: At least 10 active questions?
+      let activeQuestionCount = 0;
+      if (db) {
+        const [qCount] = await db.select({ count: drizzleSql<number>`count(*)` }).from(schema.questions).where(eq(schema.questions.isActive, true));
+        activeQuestionCount = Number(qCount?.count ?? 0);
+      }
+      const hasQuestions = activeQuestionCount >= 10;
+      // Phase 5: At least one registered user (non-admin)?
+      const allUsers = await db_module.getAllUsers();
+      const staffUsers = allUsers.filter((u: { role: string }) => u.role !== "admin");
+      const hasStaff = staffUsers.length > 0;
+      // Phase 6: At least one completed survey?
+      let completedSurveys = 0;
+      if (db) {
+        const [sCount] = await db.select({ count: drizzleSql<number>`count(*)` }).from(schema.surveys).where(eq(schema.surveys.status, "completed"));
+        completedSurveys = Number(sCount?.count ?? 0);
+      }
+      const hasSurveys = completedSurveys > 0;
+      // Phase 7: At least one group analysis section generated?
+      let analysisSections = 0;
+      if (db) {
+        const [aCount] = await db.select({ count: drizzleSql<number>`count(*)` }).from(schema.groupAnalysisSections);
+        analysisSections = Number(aCount?.count ?? 0);
+      }
+      const hasAnalysis = analysisSections > 0;
+      return {
+        phases: [
+          { id: 1, label: "AI Provider Configured", done: aiConfigured, link: "/admin/ai-settings", hint: aiConfigured ? `Provider: ${aiSettings?.provider ?? "builtin"}` : "Configure Gemini or OpenAI API key" },
+          { id: 2, label: "Groups Created", done: hasGroups, link: "/admin/groups", hint: hasGroups ? `${activeGroups.length} active group(s)` : "Create at least one respondent group" },
+          { id: 3, label: "Survey Objectives Set", done: hasConfigs, link: "/admin/survey-config", hint: hasConfigs ? `${configuredGroups} group(s) configured` : "Set TNA objectives and business context per group" },
+          { id: 4, label: "Questions Ready", done: hasQuestions, link: "/admin/questions", hint: hasQuestions ? `${activeQuestionCount} active questions` : "Add at least 10 active questions (generate via AI or upload Excel)" },
+          { id: 5, label: "Staff Registered", done: hasStaff, link: "/admin/users", hint: hasStaff ? `${staffUsers.length} staff registered` : "Share the survey URL so staff can register and take the TNA" },
+          { id: 6, label: "Surveys Completed", done: hasSurveys, link: "/admin/reports", hint: hasSurveys ? `${completedSurveys} completed survey(s)` : "Waiting for staff to complete their surveys" },
+          { id: 7, label: "Training Plan Generated", done: hasAnalysis, link: "/admin/reports", hint: hasAnalysis ? `${analysisSections} section(s) generated` : "Generate AI Training Plan sections from Group Analysis" },
+        ],
+        overallProgress: [aiConfigured, hasGroups, hasConfigs, hasQuestions, hasStaff, hasSurveys, hasAnalysis].filter(Boolean).length,
+      };
+    }),
 
     users: router({
       list: adminProcedure.query(() => getAllUsers()),
