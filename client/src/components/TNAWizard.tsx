@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import React from "react";
 import { useLocation } from "wouter";
 import { CheckCircle2, AlertCircle, Lock, ChevronRight, ChevronLeft, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ export interface WizardStep {
   link: string;
   actionLabel: string;
   description: string;
+  /** Optional inline content rendered between description and action button */
+  inlineContent?: React.ReactNode;
 }
 
 interface TNAWizardProps {
@@ -218,6 +221,13 @@ export default function TNAWizard({ steps, onComplete }: TNAWizardProps) {
         {/* Step body */}
         <div className="p-4">
           <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{currentStep.description}</p>
+
+          {/* Inline content (e.g. Create Group form for Step 1) */}
+          {currentStep.inlineContent && (
+            <div className="mb-4">
+              {currentStep.inlineContent}
+            </div>
+          )}
 
           {/* Final step confirmation */}
           {isLastStep && currentStep.done && !confirmingComplete ? (

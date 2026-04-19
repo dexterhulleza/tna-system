@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useState } from "react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
@@ -35,10 +35,19 @@ const STEP_LABELS: Record<Step, string> = {
 export default function SurveyStart() {
   const { user, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
+  const search = useSearch();
+  // Pre-select group from share link (?group=<id>)
+  const preselectedGroupId = (() => {
+    try {
+      const params = new URLSearchParams(search);
+      const g = params.get("group");
+      return g ? parseInt(g, 10) : null;
+    } catch { return null; }
+  })();
   const [step, setStep] = useState<Step>("sector");
   const [selectedSectorId, setSelectedSectorId] = useState<number | null>(null);
   const [selectedSkillAreaId, setSelectedSkillAreaId] = useState<number | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(preselectedGroupId);
   const [conductedWith, setConductedWith] = useState<"self" | "hr_officer" | "administrator">("self");
   const [conductedWithName, setConductedWithName] = useState("");
 

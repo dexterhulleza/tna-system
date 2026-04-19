@@ -206,3 +206,8 @@
 - [ ] AdminLayout sidebar: simplify nav labels, group Settings items under Settings, remove redundant items
 - [ ] AdminDashboard: ONE objective = "Launch your TNA campaign" — wizard only, stats collapsed/hidden
 - [ ] AdminReports: ONE objective = "Export or review reports" — table + Export PDF as primary action
+
+## UX Improvements (Apr 19, 2026)
+- [x] Staff "No Survey Assigned" empty state — friendly message + contact HR prompt when staff has no active survey
+- [x] Survey share link per group — copy-to-clipboard URL button on ManageGroups card; ?group= pre-selects group in SurveyStart
+- [x] Inline "Create Group" form in wizard Step 1 — embed compact name+code form inside wizard Groups step; auto-invalidates checklist on create

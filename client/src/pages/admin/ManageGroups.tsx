@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Tag, Users, Info, Home, LayoutDashboard, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, Users, Info, Home, LayoutDashboard, ChevronRight, Link2, Check } from "lucide-react";
 import { useLocation } from "wouter";
 
 type Group = {
@@ -65,6 +65,16 @@ export default function ManageGroups() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [copiedGroupId, setCopiedGroupId] = useState<number | null>(null);
+
+  const copyGroupLink = (groupId: number) => {
+    const url = `${window.location.origin}/survey/start?group=${groupId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedGroupId(groupId);
+      toast.success("Survey link copied to clipboard!");
+      setTimeout(() => setCopiedGroupId(null), 2000);
+    }).catch(() => toast.error("Failed to copy link"));
+  };
 
   const utils = trpc.useUtils();
   const { data: groups, isLoading } = trpc.groups.list.useQuery({ activeOnly: false });
@@ -239,6 +249,23 @@ export default function ManageGroups() {
                       {!group.sectorId && (
                         <Badge variant="secondary" className="text-xs">All Sectors</Badge>
                       )}
+                    </div>
+                    {/* Survey Share Link */}
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <button
+                        onClick={() => copyGroupLink(group.id)}
+                        className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors py-1 rounded group"
+                      >
+                        {copiedGroupId === group.id
+                          ? <Check className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                          : <Link2 className="w-3.5 h-3.5 flex-shrink-0" />}
+                        <span className={copiedGroupId === group.id ? "text-green-600 font-medium" : ""}>
+                          {copiedGroupId === group.id ? "Link copied!" : "Copy survey link"}
+                        </span>
+                        <span className="ml-auto text-[10px] font-mono text-muted-foreground/60 truncate max-w-[100px] hidden sm:block">
+                          ?group={group.id}
+                        </span>
+                      </button>
                     </div>
                   </CardContent>
                 </Card>
