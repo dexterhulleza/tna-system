@@ -1,30 +1,35 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+/**
+ * HR Officer Dashboard — ONE OBJECTIVE: See what needs action next and do it.
+ * Rules: wizard is the hero · stats are secondary (collapsed) · completed steps hidden by default
+ */
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import {
-  Users, BookOpen, BarChart3, Settings, FileText, ChevronRight,
-  Loader2, Tag, Sparkles, Bot, ClipboardList
+  Users, BookOpen, BarChart3, FileText,
+  Loader2, Tag, Sparkles, ChevronDown, ChevronUp, ArrowRight
 } from "lucide-react";
 import TNAWizard, { type WizardStep } from "@/components/TNAWizard";
+import { useState } from "react";
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
-  const { data: stats, isLoading } = trpc.admin.dashboard.useQuery();
+  const [showStats, setShowStats] = useState(false);
+  const { data: stats } = trpc.admin.dashboard.useQuery();
   const { data: checklist, isLoading: checklistLoading } = trpc.admin.readinessChecklist.useQuery();
 
-  // Map checklist phases (excluding AI Provider — that's admin-only) to WizardStep format
-  // The readinessChecklist returns 7 phases; we skip phase 1 (AI Provider) for the HR Officer wizard
   const wizardSteps: WizardStep[] = checklist
     ? checklist.phases
-        .filter((p) => p.id !== 1) // Remove AI Provider step — admin-only
+        .filter((p) => p.id !== 1)
         .map((p) => {
           const descriptions: Record<number, string> = {
-            2: "Create one or more survey groups to organize your respondents. Each group represents a cohort (e.g., by sector, department, or job role) that will receive the same TNA survey.",
-            3: "For each group, define the survey objectives, business goals, and industry context. This context is used by the AI to generate relevant, targeted TNA questions.",
-            4: "Ensure there are at least 10 active questions in the question bank. You can generate AI-tailored questions from the Survey Configuration page or add them manually.",
-            5: "Share the survey link with your staff so they can register and complete their TNA survey. Each respondent must log in and answer all assigned questions.",
-            6: "Wait for staff to complete their surveys. You can monitor completion status from the Reports page. A minimum of one completed survey is required before analysis.",
-            7: "Generate the AI-powered Training Plan from the Group Analysis page. Each of the 9 TESDA/NTESDP sections can be generated individually to save AI credits.",
+            2: "Create one or more survey groups to organize your respondents by sector, department, or job role.",
+            3: "Define survey objectives and business goals per group. The AI uses this to generate targeted questions.",
+            4: "Ensure at least 10 active questions exist. Generate AI-tailored questions from Survey Configuration.",
+            5: "Share the survey link with staff so they can register and complete their TNA survey.",
+            6: "Monitor survey completion from Reports. At least one completed survey is required before analysis.",
+            7: "Generate the AI-powered Training Plan from Group Analysis. Each TESDA section can be generated individually.",
           };
           const actionLabels: Record<number, string> = {
             2: "Manage Groups",
@@ -42,10 +47,8 @@ export default function AdminDashboard() {
             6: "Surveys",
             7: "Training Plan",
           };
-          // Re-number: original phases 2-7 become wizard steps 1-6
-          const wizardId = p.id - 1;
           return {
-            id: wizardId,
+            id: p.id - 1,
             label: p.label,
             shortLabel: shortLabels[p.id] ?? p.label,
             hint: p.hint,
@@ -57,194 +60,114 @@ export default function AdminDashboard() {
         })
     : [];
 
+  // Find the first incomplete step to surface the right CTA
+  const firstIncomplete = wizardSteps.find((s) => !s.done);
+  const allDone = wizardSteps.length > 0 && wizardSteps.every((s) => s.done);
+  const completedCount = wizardSteps.filter((s) => s.done).length;
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-foreground">Admin Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">Overview of the TNA system activity and management</p>
+    <div className="space-y-5 max-w-4xl">
+
+      {/* Page header — one sentence, no fluff */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">TNA Campaign</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {allDone
+              ? "All steps complete — your campaign is ready."
+              : firstIncomplete
+              ? `Next: ${firstIncomplete.shortLabel}`
+              : "Complete each step to launch your TNA campaign."}
+          </p>
+        </div>
+        {/* Stats toggle — secondary info, hidden by default */}
+        <button
+          onClick={() => setShowStats(!showStats)}
+          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0 mt-1"
+        >
+          {showStats ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          {showStats ? "Hide stats" : "View stats"}
+        </button>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      {/* Stats — collapsed by default, progressive disclosure */}
+      {showStats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Users", value: stats?.totalUsers ?? 0, icon: Users, color: "text-blue-600 bg-blue-50" },
+            { label: "Surveys", value: stats?.totalSurveys ?? 0, icon: BookOpen, color: "text-purple-600 bg-purple-50" },
+            { label: "Reports", value: stats?.totalReports ?? 0, icon: FileText, color: "text-green-600 bg-green-50" },
+            { label: "Completed", value: stats?.completedSurveys ?? 0, icon: BarChart3, color: "text-orange-600 bg-orange-50" },
+          ].map((s) => (
+            <Card key={s.label} className="border-slate-200">
+              <CardContent className="pt-4 pb-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${s.color}`}>
+                  <s.icon className="w-4 h-4" />
+                </div>
+                <p className="text-2xl font-bold text-slate-900">{s.value}</p>
+                <p className="text-xs text-slate-500">{s.label}</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
-      ) : (
-        <>
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="pt-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Users</p>
-                    <p className="text-3xl font-bold font-display text-foreground mt-1">{stats?.totalUsers ?? 0}</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <Users className="w-5 h-5 text-blue-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Surveys</p>
-                    <p className="text-3xl font-bold font-display text-foreground mt-1">{stats?.totalSurveys ?? 0}</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <BookOpen className="w-5 h-5 text-purple-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Reports</p>
-                    <p className="text-3xl font-bold font-display text-foreground mt-1">{stats?.totalReports ?? 0}</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-green-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Completed</p>
-                    <p className="text-3xl font-bold font-display text-foreground mt-1">{stats?.completedSurveys ?? 0}</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                    <BarChart3 className="w-5 h-5 text-orange-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+      )}
 
-          {/* TNA Campaign Wizard */}
-          <Card className="border-primary/20">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <ClipboardList className="w-4 h-4 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="font-display text-base">TNA Campaign Workflow</CardTitle>
-                  <CardDescription className="text-xs">
-                    Follow the 6-step process to launch a complete TNA campaign. Complete each step in order, then generate your training plan.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {checklistLoading ? (
-                <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Checking setup status...</span>
-                </div>
-              ) : wizardSteps.length > 0 ? (
-                <TNAWizard steps={wizardSteps} />
-              ) : null}
-            </CardContent>
-          </Card>
-
-          {/* Quick Actions Grid */}
-          <div>
-            <h2 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Quick Actions</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/users")}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
-                      <Users className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <CardTitle className="font-display text-base mt-2">Manage Users</CardTitle>
-                  <CardDescription className="text-xs">View, edit, and manage user accounts and roles</CardDescription>
-                </CardHeader>
-              </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/questions")}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <BookOpen className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <CardTitle className="font-display text-base mt-2">Manage Questions</CardTitle>
-                  <CardDescription className="text-xs">Customize survey questions per sector and skill area</CardDescription>
-                </CardHeader>
-              </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/sectors")}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center">
-                      <Settings className="w-5 h-5 text-green-600" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <CardTitle className="font-display text-base mt-2">Manage Sectors</CardTitle>
-                  <CardDescription className="text-xs">Configure WorldSkills sectors and skill areas</CardDescription>
-                </CardHeader>
-              </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/reports")}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center">
-                      <BarChart3 className="w-5 h-5 text-orange-600" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <CardTitle className="font-display text-base mt-2">View All Reports</CardTitle>
-                  <CardDescription className="text-xs">Access and export all TNA reports across users</CardDescription>
-                </CardHeader>
-              </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/groups")}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-teal-100 flex items-center justify-center">
-                      <Tag className="w-5 h-5 text-teal-600" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <CardTitle className="font-display text-base mt-2">Manage Groups</CardTitle>
-                  <CardDescription className="text-xs">Create group tags to organize respondents into cohorts for group analysis</CardDescription>
-                </CardHeader>
-              </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate("/admin/survey-config")}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center">
-                      <Sparkles className="w-5 h-5 text-violet-600" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <CardTitle className="font-display text-base mt-2">Survey Configuration</CardTitle>
-                  <CardDescription className="text-xs">Define objectives and business goals per group, then generate AI-tailored TNA questions</CardDescription>
-                </CardHeader>
-              </Card>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer border-primary/20" onClick={() => navigate("/admin/ai-settings")}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Bot className="w-5 h-5 text-primary" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <CardTitle className="font-display text-base mt-2">AI Provider Settings</CardTitle>
-                  <CardDescription className="text-xs">Configure OpenAI, Gemini, or custom AI provider for analysis and question generation</CardDescription>
-                </CardHeader>
-              </Card>
+      {/* Campaign progress summary bar */}
+      {wizardSteps.length > 0 && !checklistLoading && (
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-4">
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-slate-700">Campaign Setup</span>
+              <span className="text-xs text-slate-500">{completedCount} of {wizardSteps.length} steps</span>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${(completedCount / wizardSteps.length) * 100}%` }}
+              />
             </div>
           </div>
-        </>
+          {allDone && (
+            <Button size="sm" onClick={() => navigate("/admin/reports")} className="flex-shrink-0">
+              View Reports <ArrowRight className="ml-1.5 w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
       )}
+
+      {/* THE WIZARD — this is the entire page objective */}
+      <Card className="border-slate-200">
+        <CardContent className="pt-5 pb-5">
+          {checklistLoading ? (
+            <div className="flex items-center gap-2 text-slate-500 text-sm py-6 justify-center">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Checking campaign status…</span>
+            </div>
+          ) : wizardSteps.length > 0 ? (
+            <TNAWizard steps={wizardSteps} />
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Quick links — minimal, text-only, below the fold */}
+      <div className="flex flex-wrap gap-2 pt-1">
+        {[
+          { label: "Groups", icon: Tag, path: "/admin/groups" },
+          { label: "Questions", icon: BookOpen, path: "/admin/questions" },
+          { label: "Users", icon: Users, path: "/admin/users" },
+          { label: "Reports", icon: BarChart3, path: "/admin/reports" },
+          { label: "Survey Config", icon: Sparkles, path: "/admin/survey-config" },
+        ].map((item) => (
+          <button
+            key={item.path}
+            onClick={() => navigate(item.path)}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-primary transition-colors px-3 py-1.5 rounded-lg border border-slate-200 hover:border-primary/30 bg-white"
+          >
+            <item.icon className="w-3.5 h-3.5" />
+            {item.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -193,3 +193,16 @@
 - [ ] Settings page: profile, password, notifications, organization tabs
 - [ ] Reports page: charts, summary cards, export (wrapped in AdminLayout)
 - [ ] Mobile responsiveness: hamburger menu, responsive grids, touch targets
+
+## One-Objective-Per-Page Redesign (Apr 2026)
+### Rules: 3-second clarity · always-visible primary action · remove non-essential UI
+- [ ] Landing Page: ONE objective = "Start your assessment" — strip hero to headline + single CTA, remove stats/how-it-works/role cards (move to /about)
+- [ ] Profile Setup: ONE objective = "Tell us about yourself" — 3 fields max visible, inline progress, auto-advance
+- [ ] Staff Dashboard: ONE objective = "Take your assigned survey" — show only active survey card + big CTA; history collapsed
+- [ ] Survey Start (SurveyStart): ONE objective = "Pick your sector" — one selection per screen, no multi-field form
+- [ ] Survey Questions (SurveyQuestions): ONE objective = "Answer this question" — one question at a time, full-screen, auto-advance, no sidebar
+- [ ] Survey Report (SurveyReport): ONE objective = "See your gaps" — top 3 gaps + traffic-light colors + Download PDF CTA; collapse details
+- [ ] HR Officer Dashboard: ONE objective = "See what needs action" — only incomplete wizard steps shown, completed hidden by default
+- [ ] AdminLayout sidebar: simplify nav labels, group Settings items under Settings, remove redundant items
+- [ ] AdminDashboard: ONE objective = "Launch your TNA campaign" — wizard only, stats collapsed/hidden
+- [ ] AdminReports: ONE objective = "Export or review reports" — table + Export PDF as primary action

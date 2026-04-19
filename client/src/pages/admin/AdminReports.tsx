@@ -533,49 +533,15 @@ export default function AdminReports() {
     : 0;
 
   return (
-    <div className="space-y-6">
-      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <button onClick={() => navigate("/")} className="flex items-center gap-1 hover:text-foreground transition-colors">
-          <Home className="w-3.5 h-3.5" /><span>Home</span>
-        </button>
-        <ChevronRight className="w-3.5 h-3.5" />
-        <button onClick={() => navigate("/admin")} className="flex items-center gap-1 hover:text-foreground transition-colors">
-          <LayoutDashboard className="w-3.5 h-3.5" /><span>Admin Dashboard</span>
-        </button>
-        <ChevronRight className="w-3.5 h-3.5" />
-        <span className="text-foreground font-medium">All Reports</span>
-      </nav>
-      <div>
-        <h1 className="font-display text-2xl font-bold text-foreground">All Reports</h1>
-        <p className="text-muted-foreground text-sm mt-1">View all TNA reports and AI-generated TESDA-aligned group analysis</p>
-      </div>
-
-      {/* Summary Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Reports</p>
-            <p className="text-2xl font-bold font-display text-foreground mt-1">{totalReports}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Critical Gap</p>
-            <p className="text-2xl font-bold font-display text-red-600 mt-1">{criticalCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">High Gap</p>
-            <p className="text-2xl font-bold font-display text-orange-600 mt-1">{highCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Avg. Score</p>
-            <p className="text-2xl font-bold font-display text-foreground mt-1">{avgScore}%</p>
-          </CardContent>
-        </Card>
+    <div className="space-y-5 max-w-5xl">
+      {/* Page header — one sentence */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Reports</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {totalReports} total · {criticalCount > 0 ? <span className="text-red-600 font-medium">{criticalCount} critical</span> : "no critical gaps"} · avg {avgScore}%
+          </p>
+        </div>
       </div>
 
       {/* Tabs */}

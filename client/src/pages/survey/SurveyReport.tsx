@@ -1,46 +1,43 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+/**
+ * Survey Report — ONE OBJECTIVE: Understand your training gaps and download the report.
+ * Rules: score + top 3 gaps are the hero · details collapsed · Download PDF always visible
+ */
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { trpc } from "@/lib/trpc";
 import { useLocation, useParams } from "wouter";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Download, BookOpen, AlertTriangle, CheckCircle2,
-  TrendingUp, Clock, Star, ChevronDown, ChevronUp, Loader2,
-  BarChart3, Target, Award, Users
+  ArrowLeft, Download, AlertTriangle, CheckCircle2,
+  TrendingUp, ChevronDown, ChevronUp, Loader2, BarChart3
 } from "lucide-react";
 import { CATEGORY_LABELS } from "@/types/tna";
 
-const PRIORITY_CONFIG = {
-  critical: { color: "bg-red-100 text-red-700 border-red-200", icon: "🔴", label: "Critical" },
-  high: { color: "bg-orange-100 text-orange-700 border-orange-200", icon: "🟠", label: "High" },
-  medium: { color: "bg-yellow-100 text-yellow-700 border-yellow-200", icon: "🟡", label: "Medium" },
-  low: { color: "bg-green-100 text-green-700 border-green-200", icon: "🟢", label: "Low" },
+const GAP_LEVEL_CONFIG: Record<string, { bg: string; text: string; border: string; label: string; dot: string }> = {
+  critical: { bg: "bg-red-50",    text: "text-red-700",    border: "border-red-200",    label: "Critical Gap",  dot: "bg-red-500" },
+  high:     { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200", label: "High Gap",      dot: "bg-orange-500" },
+  moderate: { bg: "bg-yellow-50", text: "text-yellow-700", border: "border-yellow-200", label: "Moderate Gap",  dot: "bg-yellow-500" },
+  medium:   { bg: "bg-yellow-50", text: "text-yellow-700", border: "border-yellow-200", label: "Moderate Gap",  dot: "bg-yellow-500" },
+  low:      { bg: "bg-green-50",  text: "text-green-700",  border: "border-green-200",  label: "Low Gap",       dot: "bg-green-500" },
+  none:     { bg: "bg-slate-50",  text: "text-slate-600",  border: "border-slate-200",  label: "No Gap",        dot: "bg-slate-400" },
 };
 
-const TRAINING_TYPE_ICONS: Record<string, string> = {
-  formal_training: "🎓",
-  on_the_job: "🔧",
-  mentoring: "👥",
-  self_study: "📚",
-  workshop: "🏫",
-  online_course: "💻",
-  certification: "🏆",
-  coaching: "🎯",
+const PRIORITY_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
+  critical: { bg: "bg-red-100",    text: "text-red-700",    label: "Critical" },
+  high:     { bg: "bg-orange-100", text: "text-orange-700", label: "High" },
+  medium:   { bg: "bg-yellow-100", text: "text-yellow-700", label: "Medium" },
+  low:      { bg: "bg-green-100",  text: "text-green-700",  label: "Low" },
 };
 
 export default function SurveyReport() {
   const { surveyId } = useParams<{ surveyId: string }>();
   const [, navigate] = useLocation();
-  const [expandedRec, setExpandedRec] = useState<number | null>(null);
+  const [showAllGaps, setShowAllGaps] = useState(false);
+  const [showCategoryBreakdown, setShowCategoryBreakdown] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const id = parseInt(surveyId || "0");
-
   const { data: reportData, isLoading } = trpc.reports.getBySurvey.useQuery({ surveyId: id });
 
   const handleExportPDF = async () => {
@@ -60,320 +57,247 @@ export default function SurveyReport() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success("PDF exported successfully!");
-    } catch (err) {
+      toast.success("PDF exported!");
+    } catch {
       toast.error("PDF export failed. Please try again.");
     } finally {
       setIsExporting(false);
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-4" />
-          <p className="font-semibold text-foreground">Generating your report...</p>
-          <p className="text-sm text-muted-foreground mt-1">Analyzing training needs and preparing recommendations</p>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm font-medium text-slate-700">Analyzing your results…</p>
+        <p className="text-xs text-slate-500">This may take a few seconds</p>
       </div>
     );
   }
 
   if (!reportData) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-muted-foreground mb-4">Report not found.</p>
-          <Button onClick={() => navigate("/survey/start")}>Start New Survey</Button>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+        <p className="text-slate-500">Report not found.</p>
+        <Button onClick={() => navigate("/survey/start")}>Start New Survey</Button>
       </div>
     );
   }
 
   const { report, sector, skillArea, recommendations } = reportData;
-  const overallScore = report.overallScore ? parseFloat(String(report.overallScore)) : 0;
-  const gapLevel = report.gapLevel || "none";
-  const identifiedGaps = (report.identifiedGaps as Array<{category: string; questionText: string; gapPercentage: number}>) || [];
+  const overallScore = Math.round(parseFloat(String(report.overallScore || 0)));
+  const gapLevel = (report.gapLevel || "none") as string;
+  const gapConfig = GAP_LEVEL_CONFIG[gapLevel] || GAP_LEVEL_CONFIG.none;
+  const identifiedGaps = (report.identifiedGaps as Array<{ category: string; questionText: string; gapPercentage: number }>) || [];
   const categoryScores = (report.categoryScores as Record<string, number>) || {};
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-600";
-    if (score >= 60) return "text-yellow-600";
-    if (score >= 40) return "text-orange-600";
-    return "text-red-600";
-  };
+  const topGaps = [...identifiedGaps].sort((a, b) => b.gapPercentage - a.gapPercentage).slice(0, 3);
+  const remainingGaps = identifiedGaps.length > 3 ? identifiedGaps.length - 3 : 0;
 
-  const getScoreBg = (score: number) => {
-    if (score >= 80) return "bg-green-500";
-    if (score >= 60) return "bg-yellow-500";
-    if (score >= 40) return "bg-orange-500";
-    return "bg-red-500";
-  };
-
-  const getScoreLabel = (score: number) => {
-    if (score >= 80) return "Strong";
-    if (score >= 60) return "Moderate";
-    if (score >= 40) return "Needs Improvement";
-    return "Critical Gap";
-  };
+  const scoreColor = overallScore >= 80 ? "text-green-600" : overallScore >= 60 ? "text-yellow-600" : overallScore >= 40 ? "text-orange-600" : "text-red-600";
+  const scoreLabel = overallScore >= 80 ? "Strong" : overallScore >= 60 ? "Moderate" : overallScore >= 40 ? "Needs Work" : "Critical";
 
   return (
-    <div className="min-h-screen bg-muted/30 print:bg-white">
-      {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10 print:hidden">
-        <div className="container flex items-center justify-between h-14">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/dashboard")} className="text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-primary" />
-              <span className="font-display font-semibold text-foreground">Training Needs Analysis Report</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handlePrint}>
-              Print
-            </Button>
-            <Button size="sm" onClick={handleExportPDF} disabled={isExporting}>
-              {isExporting ? (
-                <Loader2 className="mr-2 w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 w-4 h-4" />
-              )}
-              Export PDF
-            </Button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
 
-      <div className="container py-8 max-w-4xl">
-        {/* Report Header */}
-        <div className="bg-gradient-to-r from-primary to-blue-700 rounded-2xl p-6 text-white mb-6 print:bg-primary">
-          <div className="flex items-start justify-between">
+      {/* Sticky header — back + download PDF always visible */}
+      <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
+        <div className="flex items-center justify-between px-4 py-3 max-w-2xl mx-auto w-full">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Dashboard
+          </button>
+          <Button
+            size="sm"
+            onClick={handleExportPDF}
+            disabled={isExporting}
+            className="flex-shrink-0"
+          >
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 mr-1.5" />}
+            {isExporting ? "Exporting…" : "Download PDF"}
+          </Button>
+        </div>
+      </header>
+
+      <main className="flex-1 px-4 py-6 max-w-2xl mx-auto w-full space-y-4">
+
+        {/* HERO: Score + gap level */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <Badge className="bg-white/20 text-white border-white/30 mb-3">Training Needs Analysis Report</Badge>
-              <h1 className="font-display text-2xl font-bold mb-1">{sector?.name || "Sector"}</h1>
-              {skillArea && <p className="text-blue-100 text-sm mb-2">{skillArea.name}</p>}
-              <p className="text-blue-100 text-xs">
-                Generated on {new Date(report.createdAt).toLocaleDateString("en-US", {
-                  year: "numeric", month: "long", day: "numeric"
-                })}
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                {sector?.name || "Assessment"}{skillArea ? ` · ${skillArea.name}` : ""}
+              </p>
+              <h1 className="text-lg font-bold text-slate-900">Your TNA Results</h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {new Date(report.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
               </p>
             </div>
-            <div className="text-right">
-              <div className={`text-5xl font-bold font-display ${overallScore >= 60 ? "text-white" : "text-red-200"}`}>
-                {Math.round(overallScore)}
-              </div>
-              <div className="text-blue-100 text-sm">Overall Score</div>
-              <div className="text-white font-semibold text-sm mt-1">{getScoreLabel(overallScore)}</div>
+            <div className="text-right flex-shrink-0">
+              <p className={`text-4xl font-bold leading-none ${scoreColor}`}>{overallScore}</p>
+              <p className="text-xs text-slate-500 mt-1">/ 100</p>
+              <p className={`text-xs font-semibold mt-1 ${scoreColor}`}>{scoreLabel}</p>
             </div>
+          </div>
+
+          {/* Gap level badge */}
+          <div className={`mt-4 flex items-center gap-2 px-3 py-2 rounded-lg border ${gapConfig.bg} ${gapConfig.border}`}>
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${gapConfig.dot}`} />
+            <span className={`text-sm font-semibold ${gapConfig.text}`}>{gapConfig.label}</span>
+            {gapLevel === "critical" || gapLevel === "high" ? (
+              <AlertTriangle className={`w-3.5 h-3.5 ml-auto ${gapConfig.text}`} />
+            ) : (
+              <CheckCircle2 className={`w-3.5 h-3.5 ml-auto ${gapConfig.text}`} />
+            )}
           </div>
         </div>
 
-        {/* Score Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <Card>
-            <CardContent className="pt-4 text-center">
-              <BarChart3 className="w-6 h-6 text-primary mx-auto mb-2" />
-              <div className={`text-2xl font-bold font-display ${getScoreColor(overallScore)}`}>
-                {Math.round(overallScore)}%
+        {/* TOP 3 GAPS — the most actionable info */}
+        {topGaps.length > 0 && (
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-orange-500" />
+                <h2 className="text-sm font-bold text-slate-900">Top Training Gaps</h2>
+                <span className="ml-auto text-xs text-slate-400">{identifiedGaps.length} total</span>
               </div>
-              <div className="text-xs text-muted-foreground">Overall Score</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 text-center">
-              <AlertTriangle className="w-6 h-6 text-orange-500 mx-auto mb-2" />
-              <div className="text-2xl font-bold font-display text-orange-600 capitalize">
-                {gapLevel}
-              </div>
-              <div className="text-xs text-muted-foreground">Gap Level</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 text-center">
-              <Target className="w-6 h-6 text-purple-500 mx-auto mb-2" />
-              <div className="text-2xl font-bold font-display text-purple-600">
-                {identifiedGaps.length}
-              </div>
-              <div className="text-xs text-muted-foreground">Priority Gaps</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 text-center">
-              <Award className="w-6 h-6 text-green-500 mx-auto mb-2" />
-              <div className="text-2xl font-bold font-display text-green-600">
-                {recommendations?.length || 0}
-              </div>
-              <div className="text-xs text-muted-foreground">Recommendations</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Category Scores */}
-        {Object.keys(categoryScores).length > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="font-display text-base flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-primary" />
-                Category Breakdown
-              </CardTitle>
-              <CardDescription>Performance scores across all assessment categories</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {Object.entries(categoryScores).map(([cat, score]) => (
-                <div key={cat}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-foreground">
-                      {CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] || cat}
-                    </span>
-                    <span className={`text-sm font-semibold ${getScoreColor(score)}`}>
-                      {Math.round(score)}%
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${getScoreBg(score)}`}
-                      style={{ width: `${Math.min(score, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Priority Gaps */}
-        {identifiedGaps.length > 0 && (
-          <Card className="mb-6 border-orange-200 bg-orange-50/50">
-            <CardHeader>
-              <CardTitle className="font-display text-base flex items-center gap-2 text-orange-700">
-                <AlertTriangle className="w-5 h-5" />
-                Training Gaps Identified
-              </CardTitle>
-              <CardDescription>Areas requiring attention based on your assessment</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {identifiedGaps.slice(0, 8).map((gap, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 bg-white rounded-lg border border-orange-200">
-                    <span className="text-sm text-orange-700 font-medium">{gap.questionText}</span>
-                    <Badge variant="outline" className="border-orange-300 text-orange-700 bg-white text-xs">
-                      {Math.round(gap.gapPercentage)}% gap
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Recommendations */}
-        {recommendations && recommendations.length > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="font-display text-base flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                Training Recommendations
-              </CardTitle>
-              <CardDescription>
-                Prioritized recommendations based on your identified training needs
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {recommendations.map((rec, i) => {
-                  const priority = (rec.priority || "medium") as keyof typeof PRIORITY_CONFIG;
-                  const config = PRIORITY_CONFIG[priority] ?? PRIORITY_CONFIG.medium;
-                const isExpanded = expandedRec === i;
-
+            </div>
+            <div className="divide-y divide-slate-100">
+              {topGaps.map((gap, i) => {
+                const pct = Math.round(gap.gapPercentage);
+                const barColor = pct >= 70 ? "bg-red-500" : pct >= 40 ? "bg-orange-500" : "bg-yellow-500";
                 return (
-                  <div key={i} className={`rounded-xl border p-4 ${config.color}`}>
-                    <button
-                      className="w-full text-left"
-                      onClick={() => setExpandedRec(isExpanded ? null : i)}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 flex-1">
-                          <span className="text-lg mt-0.5">{(rec.trainingType ? TRAINING_TYPE_ICONS[rec.trainingType] : null) || "📋"}</span>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-sm">{rec.title}</span>
-                              <Badge variant="outline" className={`text-xs ${config.color}`}>
-                                {config.icon} {config.label}
-                              </Badge>
-                              {rec.estimatedDuration && (
-                                <span className="flex items-center gap-1 text-xs opacity-75">
-                                  <Clock className="w-3 h-3" />
-                                  {rec.estimatedDuration}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs opacity-75 mt-0.5 line-clamp-1">{rec.description}</p>
-                          </div>
-                        </div>
-                        {isExpanded ? <ChevronUp className="w-4 h-4 flex-shrink-0 mt-1" /> : <ChevronDown className="w-4 h-4 flex-shrink-0 mt-1" />}
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-current/20 space-y-2">
-                        <p className="text-sm">{rec.description}</p>
-
-                        <div className="flex items-center gap-4 text-xs opacity-75 pt-1">
-                          <span>Type: <strong>{rec.trainingType?.replace(/_/g, " ")}</strong></span>
-                          {rec.estimatedDuration && <span>Duration: <strong>{rec.estimatedDuration}</strong></span>}
-                          {rec.estimatedCost && <span>Est. Cost: <strong>{rec.estimatedCost}</strong></span>}
-                        </div>
-                      </div>
-                    )}
+                  <div key={i} className="px-5 py-3.5">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <p className="text-sm text-slate-800 font-medium leading-snug">{gap.questionText}</p>
+                      <span className={`text-xs font-bold flex-shrink-0 ${pct >= 70 ? "text-red-600" : pct >= 40 ? "text-orange-600" : "text-yellow-600"}`}>
+                        {pct}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {CATEGORY_LABELS[gap.category as keyof typeof CATEGORY_LABELS] || gap.category}
+                    </p>
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Summary */}
-        {report.summary && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="font-display text-base flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
-                Executive Summary
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground leading-relaxed">{report.summary}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 print:hidden">
-          <Button variant="outline" onClick={() => navigate("/dashboard")} className="flex-1">
-            <ArrowLeft className="mr-2 w-4 h-4" />
-            Back to Dashboard
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/survey/start")} className="flex-1">
-            <BookOpen className="mr-2 w-4 h-4" />
-            Start New Survey
-          </Button>
-          <Button onClick={handleExportPDF} disabled={isExporting} className="flex-1">
-            {isExporting ? (
-              <Loader2 className="mr-2 w-4 h-4 animate-spin" />
-            ) : (
-              <Download className="mr-2 w-4 h-4" />
+            </div>
+            {remainingGaps > 0 && (
+              <button
+                onClick={() => setShowAllGaps(!showAllGaps)}
+                className="w-full flex items-center justify-center gap-1.5 px-5 py-3 text-xs text-slate-500 hover:bg-slate-50 transition-colors border-t border-slate-100"
+              >
+                {showAllGaps ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                {showAllGaps ? "Show less" : `Show ${remainingGaps} more gap${remainingGaps > 1 ? "s" : ""}`}
+              </button>
             )}
-            Export PDF Report
-          </Button>
+            {showAllGaps && (
+              <div className="divide-y divide-slate-100 border-t border-slate-100">
+                {identifiedGaps.slice(3).map((gap, i) => {
+                  const pct = Math.round(gap.gapPercentage);
+                  return (
+                    <div key={i} className="px-5 py-3 flex items-center justify-between gap-3">
+                      <p className="text-sm text-slate-700 leading-snug">{gap.questionText}</p>
+                      <span className="text-xs font-semibold text-slate-600 flex-shrink-0">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Category breakdown — collapsed by default */}
+        {Object.keys(categoryScores).length > 0 && (
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <button
+              onClick={() => setShowCategoryBreakdown(!showCategoryBreakdown)}
+              className="w-full flex items-center justify-between px-5 py-4 text-sm hover:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-slate-500" />
+                <span className="font-semibold text-slate-900">Category Breakdown</span>
+              </div>
+              {showCategoryBreakdown ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </button>
+            {showCategoryBreakdown && (
+              <div className="border-t border-slate-100 px-5 py-4 space-y-3">
+                {Object.entries(categoryScores).map(([cat, score]) => {
+                  const s = Math.round(score);
+                  const barColor = s >= 80 ? "bg-green-500" : s >= 60 ? "bg-yellow-500" : s >= 40 ? "bg-orange-500" : "bg-red-500";
+                  const textColor = s >= 80 ? "text-green-600" : s >= 60 ? "text-yellow-600" : s >= 40 ? "text-orange-600" : "text-red-600";
+                  return (
+                    <div key={cat}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-slate-700">
+                          {CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] || cat}
+                        </span>
+                        <span className={`text-xs font-bold ${textColor}`}>{s}%</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(s, 100)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Recommendations — collapsed by default */}
+        {recommendations && recommendations.length > 0 && (
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <button
+              onClick={() => setShowRecommendations(!showRecommendations)}
+              className="w-full flex items-center justify-between px-5 py-4 text-sm hover:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                <span className="font-semibold text-slate-900">Training Recommendations</span>
+                <span className="text-xs text-slate-400">({recommendations.length})</span>
+              </div>
+              {showRecommendations ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </button>
+            {showRecommendations && (
+              <div className="border-t border-slate-100 divide-y divide-slate-100">
+                {recommendations.map((rec: any, i: number) => {
+                  const priority = (rec.priority || "medium") as string;
+                  const pConfig = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.medium;
+                  return (
+                    <div key={i} className="px-5 py-4">
+                      <div className="flex items-start justify-between gap-3 mb-1">
+                        <p className="text-sm font-semibold text-slate-900">{rec.title || rec.trainingArea}</p>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${pConfig.bg} ${pConfig.text}`}>
+                          {pConfig.label}
+                        </span>
+                      </div>
+                      {rec.description && (
+                        <p className="text-xs text-slate-500 leading-relaxed">{rec.description}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Start new survey CTA */}
+        <div className="pt-2 pb-6">
+          <button
+            onClick={() => navigate("/survey/start")}
+            className="w-full text-center text-sm text-slate-500 hover:text-primary transition-colors py-2"
+          >
+            Take another assessment →
+          </button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

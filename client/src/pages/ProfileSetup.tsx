@@ -1,168 +1,146 @@
+/**
+ * Profile Setup — ONE OBJECTIVE: Pick your role so we can tailor your survey.
+ * Rules: role selection is the ONLY required action · org/title are secondary · always-visible CTA
+ */
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { toast } from "sonner";
-import { BookOpen, Briefcase, GraduationCap, ClipboardCheck, UserCog, ArrowLeft } from "lucide-react";
+import { ArrowRight, Briefcase, GraduationCap, ClipboardCheck, UserCog, ChevronDown, ChevronUp } from "lucide-react";
 
 const ROLES = [
-  {
-    value: "industry_worker",
-    label: "Industry Worker",
-    description: "A professional working in an industry who needs training to improve skills and performance.",
-    icon: <Briefcase className="w-7 h-7" />,
-    color: "border-blue-400 bg-blue-50 hover:bg-blue-100",
-    selectedColor: "border-blue-600 bg-blue-100 ring-2 ring-blue-400",
-    iconColor: "text-blue-600",
-  },
-  {
-    value: "trainer",
-    label: "Trainer",
-    description: "A professional who delivers training programs and needs to identify gaps in training delivery.",
-    icon: <GraduationCap className="w-7 h-7" />,
-    color: "border-green-400 bg-green-50 hover:bg-green-100",
-    selectedColor: "border-green-600 bg-green-100 ring-2 ring-green-400",
-    iconColor: "text-green-600",
-  },
-  {
-    value: "assessor",
-    label: "Assessor",
-    description: "An evaluator who assesses competencies and identifies training needs through performance reviews.",
-    icon: <ClipboardCheck className="w-7 h-7" />,
-    color: "border-purple-400 bg-purple-50 hover:bg-purple-100",
-    selectedColor: "border-purple-600 bg-purple-100 ring-2 ring-purple-400",
-    iconColor: "text-purple-600",
-  },
-  {
-    value: "hr_officer",
-    label: "HR Officer",
-    description: "A human resources professional who manages workforce development and training programs.",
-    icon: <UserCog className="w-7 h-7" />,
-    color: "border-orange-400 bg-orange-50 hover:bg-orange-100",
-    selectedColor: "border-orange-600 bg-orange-100 ring-2 ring-orange-400",
-    iconColor: "text-orange-600",
-  },
-];
+  { value: "industry_worker", label: "Industry Worker", icon: Briefcase, color: "blue" },
+  { value: "trainer",         label: "Trainer",         icon: GraduationCap, color: "green" },
+  { value: "assessor",        label: "Assessor",        icon: ClipboardCheck, color: "purple" },
+  { value: "hr_officer",      label: "HR Officer",      icon: UserCog, color: "orange" },
+] as const;
+
+const COLOR_MAP: Record<string, { ring: string; bg: string; text: string; iconBg: string }> = {
+  blue:   { ring: "ring-blue-500 border-blue-500",   bg: "bg-blue-50",   text: "text-blue-700",   iconBg: "bg-blue-100" },
+  green:  { ring: "ring-green-500 border-green-500", bg: "bg-green-50",  text: "text-green-700",  iconBg: "bg-green-100" },
+  purple: { ring: "ring-purple-500 border-purple-500", bg: "bg-purple-50", text: "text-purple-700", iconBg: "bg-purple-100" },
+  orange: { ring: "ring-orange-500 border-orange-500", bg: "bg-orange-50", text: "text-orange-700", iconBg: "bg-orange-100" },
+};
 
 export default function ProfileSetup() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const currentTnaRole = user?.tnaRole && user.tnaRole !== "admin" ? user.tnaRole : "industry_worker";
-  const [selectedRole, setSelectedRole] = useState<string>(currentTnaRole);
+  const existing = user?.tnaRole && user.tnaRole !== "admin" ? user.tnaRole : "industry_worker";
+  const [selectedRole, setSelectedRole] = useState<string>(existing);
   const [organization, setOrganization] = useState(user?.organization || "");
   const [jobTitle, setJobTitle] = useState(user?.jobTitle || "");
+  const [showDetails, setShowDetails] = useState(!!(user?.organization || user?.jobTitle));
 
   const updateProfile = trpc.auth.updateProfile.useMutation({
     onSuccess: () => {
-      toast.success("Profile updated successfully!");
+      toast.success("Profile saved!");
       navigate("/survey/start");
     },
     onError: (err) => {
-      toast.error(err.message || "Failed to update profile");
+      toast.error(err.message || "Failed to save profile");
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateProfile.mutate({
-      tnaRole: selectedRole as any,
-      organization,
-      jobTitle,
-    });
+  const handleSubmit = () => {
+    updateProfile.mutate({ tnaRole: selectedRole as any, organization, jobTitle });
   };
 
   return (
-    <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
-      {/* Back to home */}
-      <div className="fixed top-4 left-4">
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors bg-background/80 backdrop-blur-sm px-3 py-1.5 rounded-full border shadow-sm"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Home</span>
-        </button>
-      </div>
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
-            <BookOpen className="w-7 h-7 text-white" />
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Slim header */}
+      <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
+        <span className="text-sm font-semibold text-slate-700">TNA System</span>
+        <span className="text-xs text-slate-400">Step 1 of 1 — Your Profile</span>
+      </header>
+
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md space-y-6">
+
+          {/* Page title — one sentence */}
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">What's your role?</h1>
+            <p className="text-sm text-slate-500 mt-1">We'll tailor the survey questions to your position.</p>
           </div>
-          <h1 className="font-display text-3xl font-bold text-foreground mb-2">Set Up Your Profile</h1>
-          <p className="text-muted-foreground">
-            Tell us about your role so we can tailor the survey to your needs.
-          </p>
-        </div>
 
-        <form onSubmit={handleSubmit}>
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="font-display text-lg">Your Role</CardTitle>
-              <CardDescription>Select the role that best describes your position.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {ROLES.map((role) => (
-                  <button
-                    key={role.value}
-                    type="button"
-                    onClick={() => setSelectedRole(role.value)}
-                    className={`text-left p-4 rounded-xl border-2 transition-all ${
-                      selectedRole === role.value ? role.selectedColor : role.color
-                    }`}
-                  >
-                    <div className={`${role.iconColor} mb-2`}>{role.icon}</div>
-                    <div className="font-semibold text-foreground text-sm mb-1">{role.label}</div>
-                    <div className="text-xs text-muted-foreground leading-relaxed">{role.description}</div>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Role cards — large tap targets */}
+          <div className="grid grid-cols-2 gap-3">
+            {ROLES.map((role) => {
+              const c = COLOR_MAP[role.color];
+              const Icon = role.icon;
+              const selected = selectedRole === role.value;
+              return (
+                <button
+                  key={role.value}
+                  type="button"
+                  onClick={() => setSelectedRole(role.value)}
+                  className={`
+                    relative flex flex-col items-start gap-3 p-4 rounded-xl border-2 text-left transition-all
+                    ${selected ? `${c.ring} ${c.bg} ring-2` : "border-slate-200 bg-white hover:border-slate-300"}
+                  `}
+                >
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${selected ? c.iconBg : "bg-slate-100"}`}>
+                    <Icon className={`w-5 h-5 ${selected ? c.text : "text-slate-500"}`} />
+                  </div>
+                  <span className={`text-sm font-semibold ${selected ? c.text : "text-slate-700"}`}>
+                    {role.label}
+                  </span>
+                  {selected && (
+                    <span className={`absolute top-2 right-2 w-2 h-2 rounded-full ${c.text.replace("text-", "bg-")}`} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="font-display text-lg">Professional Details</CardTitle>
-              <CardDescription>Optional information to personalize your report.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="organization">Organization / Company</Label>
+          {/* Optional details — hidden by default, progressive disclosure */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+            <button
+              type="button"
+              onClick={() => setShowDetails(!showDetails)}
+              className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              <span className="font-medium">Add organization & job title <span className="text-slate-400 font-normal">(optional)</span></span>
+              {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+            {showDetails && (
+              <div className="px-4 pb-4 space-y-3 border-t border-slate-100">
+                <div className="pt-3">
+                  <Input
+                    placeholder="Organization / Company"
+                    value={organization}
+                    onChange={(e) => setOrganization(e.target.value)}
+                    className="bg-slate-50"
+                  />
+                </div>
                 <Input
-                  id="organization"
-                  placeholder="e.g., WorldSkills Philippines"
-                  value={organization}
-                  onChange={(e) => setOrganization(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="jobTitle">Job Title / Position</Label>
-                <Input
-                  id="jobTitle"
-                  placeholder="e.g., Senior Trainer, Production Manager"
+                  placeholder="Job Title / Position"
                   value={jobTitle}
                   onChange={(e) => setJobTitle(e.target.value)}
-                  className="mt-1"
+                  className="bg-slate-50"
                 />
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </div>
 
+          {/* PRIMARY CTA — always visible, full width */}
           <Button
-            type="submit"
-            className="w-full"
+            onClick={handleSubmit}
+            disabled={!selectedRole || updateProfile.isPending}
             size="lg"
-            disabled={updateProfile.isPending}
+            className="w-full py-6 text-base font-semibold rounded-xl"
           >
-            {updateProfile.isPending ? "Saving..." : "Continue to Survey"}
+            {updateProfile.isPending ? "Saving…" : "Continue to Survey"}
+            {!updateProfile.isPending && <ArrowRight className="ml-2 w-5 h-5" />}
           </Button>
-        </form>
-      </div>
+
+          <p className="text-center text-xs text-slate-400">
+            You can update this anytime from Settings
+          </p>
+        </div>
+      </main>
     </div>
   );
 }

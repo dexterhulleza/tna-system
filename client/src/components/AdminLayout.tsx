@@ -40,18 +40,21 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
-  { icon: Tag, label: "Staff Groups", path: "/admin/groups" },
-  { icon: Sparkles, label: "Survey Config", path: "/admin/survey-config" },
-  { icon: BookOpen, label: "Questions", path: "/admin/questions" },
-  { icon: Users, label: "Respondents", path: "/admin/users" },
+  { icon: LayoutDashboard, label: "Campaign", path: "/admin" },
+  { icon: Tag, label: "Groups", path: "/admin/groups" },
+  { icon: Sparkles, label: "Survey Setup", path: "/admin/survey-config" },
+  { icon: Users, label: "Staff", path: "/admin/users" },
   { icon: BarChart3, label: "Reports", path: "/admin/reports" },
-  { icon: Globe, label: "Sectors", path: "/admin/sectors" },
 ];
 
-const ADMIN_ONLY_ITEMS: NavItem[] = [
-  { icon: Bot, label: "AI Provider", path: "/admin/ai-settings", adminOnly: true },
+// Settings sub-items — shown under a collapsible Settings section
+const SETTINGS_ITEMS: NavItem[] = [
+  { icon: BookOpen, label: "Questions", path: "/admin/questions" },
+  { icon: Globe, label: "Sectors", path: "/admin/sectors" },
+  { icon: Bot, label: "AI Provider", path: "/admin/ai-settings" },
 ];
+
+const ADMIN_ONLY_ITEMS: NavItem[] = [];
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -84,16 +87,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     navigate("/");
   };
 
+  const [settingsOpen, setSettingsOpen] = useState(
+    SETTINGS_ITEMS.some((i) => isActive(i.path))
+  );
+
   const NavLinks = ({ onItemClick }: { onItemClick?: () => void }) => (
     <nav className="flex-1 overflow-y-auto py-4">
       <div className="px-3 space-y-0.5">
         {NAV_ITEMS.map((item) => (
           <button
             key={item.path}
-            onClick={() => {
-              navigate(item.path);
-              onItemClick?.();
-            }}
+            onClick={() => { navigate(item.path); onItemClick?.(); }}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
               isActive(item.path)
@@ -103,37 +107,43 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <item.icon className="w-4 h-4 flex-shrink-0" />
             <span>{item.label}</span>
-            {item.badge && (
-              <Badge variant="secondary" className="ml-auto text-xs py-0 px-1.5">
-                {item.badge}
-              </Badge>
-            )}
           </button>
         ))}
-      </div>
-      {/* Admin-only section */}
-      <div className="mt-4 px-3">
-        <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Admin Only</p>
-        <div className="space-y-0.5">
-          {ADMIN_ONLY_ITEMS.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => {
-                navigate(item.path);
-                onItemClick?.();
-              }}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                isActive(item.path)
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-              )}
-            >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
+
+        {/* Settings — collapsible, hides advanced config */}
+        <button
+          onClick={() => setSettingsOpen(!settingsOpen)}
+          className={cn(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+            settingsOpen || SETTINGS_ITEMS.some((i) => isActive(i.path))
+              ? "text-slate-900 bg-slate-100"
+              : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          )}
+        >
+          <Settings className="w-4 h-4 flex-shrink-0" />
+          <span>Settings</span>
+          <ChevronDown className={cn("w-3.5 h-3.5 ml-auto transition-transform", settingsOpen && "rotate-180")} />
+        </button>
+
+        {settingsOpen && (
+          <div className="ml-3 pl-3 border-l border-slate-200 space-y-0.5">
+            {SETTINGS_ITEMS.map((item) => (
+              <button
+                key={item.path}
+                onClick={() => { navigate(item.path); onItemClick?.(); }}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
+                  isActive(item.path)
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                )}
+              >
+                <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </nav>
   );
