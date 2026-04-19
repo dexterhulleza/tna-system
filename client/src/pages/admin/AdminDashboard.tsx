@@ -1,27 +1,61 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import {
   Users, BookOpen, BarChart3, Settings, FileText, ChevronRight,
-  Loader2, Tag, Sparkles, Bot, CheckCircle2, Circle, ArrowRight, ClipboardList
+  Loader2, Tag, Sparkles, Bot, ClipboardList
 } from "lucide-react";
+import TNAWizard, { type WizardStep } from "@/components/TNAWizard";
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const { data: stats, isLoading } = trpc.admin.dashboard.useQuery();
   const { data: checklist, isLoading: checklistLoading } = trpc.admin.readinessChecklist.useQuery();
 
-  const phaseColors = [
-    "bg-violet-100 text-violet-700",
-    "bg-teal-100 text-teal-700",
-    "bg-violet-100 text-violet-700",
-    "bg-purple-100 text-purple-700",
-    "bg-blue-100 text-blue-700",
-    "bg-orange-100 text-orange-700",
-    "bg-green-100 text-green-700",
-  ];
+  // Map checklist phases (excluding AI Provider — that's admin-only) to WizardStep format
+  // The readinessChecklist returns 7 phases; we skip phase 1 (AI Provider) for the HR Officer wizard
+  const wizardSteps: WizardStep[] = checklist
+    ? checklist.phases
+        .filter((p) => p.id !== 1) // Remove AI Provider step — admin-only
+        .map((p) => {
+          const descriptions: Record<number, string> = {
+            2: "Create one or more survey groups to organize your respondents. Each group represents a cohort (e.g., by sector, department, or job role) that will receive the same TNA survey.",
+            3: "For each group, define the survey objectives, business goals, and industry context. This context is used by the AI to generate relevant, targeted TNA questions.",
+            4: "Ensure there are at least 10 active questions in the question bank. You can generate AI-tailored questions from the Survey Configuration page or add them manually.",
+            5: "Share the survey link with your staff so they can register and complete their TNA survey. Each respondent must log in and answer all assigned questions.",
+            6: "Wait for staff to complete their surveys. You can monitor completion status from the Reports page. A minimum of one completed survey is required before analysis.",
+            7: "Generate the AI-powered Training Plan from the Group Analysis page. Each of the 9 TESDA/NTESDP sections can be generated individually to save AI credits.",
+          };
+          const actionLabels: Record<number, string> = {
+            2: "Manage Groups",
+            3: "Survey Configuration",
+            4: "Manage Questions",
+            5: "Manage Users",
+            6: "View Reports",
+            7: "Group Analysis",
+          };
+          const shortLabels: Record<number, string> = {
+            2: "Groups",
+            3: "Objectives",
+            4: "Questions",
+            5: "Staff",
+            6: "Surveys",
+            7: "Training Plan",
+          };
+          // Re-number: original phases 2-7 become wizard steps 1-6
+          const wizardId = p.id - 1;
+          return {
+            id: wizardId,
+            label: p.label,
+            shortLabel: shortLabels[p.id] ?? p.label,
+            hint: p.hint,
+            done: p.done,
+            link: p.link,
+            actionLabel: actionLabels[p.id] ?? "Go",
+            description: descriptions[p.id] ?? "",
+          };
+        })
+    : [];
 
   return (
     <div className="space-y-6">
@@ -92,31 +126,20 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          {/* TNA Setup Readiness Checklist */}
+          {/* TNA Campaign Wizard */}
           <Card className="border-primary/20">
             <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <ClipboardList className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="font-display text-base">TNA Campaign Readiness</CardTitle>
-                    <CardDescription className="text-xs">Complete all 7 phases to launch a TNA campaign for your staff. Click any phase to go directly to that setup step.</CardDescription>
-                  </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <ClipboardList className="w-4 h-4 text-primary" />
                 </div>
-                {checklist && (
-                  <Badge
-                    variant={checklist.overallProgress === 7 ? "default" : "secondary"}
-                    className="text-xs flex-shrink-0"
-                  >
-                    {checklist.overallProgress}/7 Done
-                  </Badge>
-                )}
+                <div>
+                  <CardTitle className="font-display text-base">TNA Campaign Workflow</CardTitle>
+                  <CardDescription className="text-xs">
+                    Follow the 6-step process to launch a complete TNA campaign. Complete each step in order, then generate your training plan.
+                  </CardDescription>
+                </div>
               </div>
-              {checklist && (
-                <Progress value={(checklist.overallProgress / 7) * 100} className="h-2 mt-3" />
-              )}
             </CardHeader>
             <CardContent className="pt-0">
               {checklistLoading ? (
@@ -124,34 +147,8 @@ export default function AdminDashboard() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Checking setup status...</span>
                 </div>
-              ) : checklist ? (
-                <div className="divide-y divide-border/50">
-                  {checklist.phases.map((phase, idx) => (
-                    <button
-                      key={phase.id}
-                      onClick={() => navigate(phase.link)}
-                      className="w-full flex items-center gap-3 py-2.5 px-1 hover:bg-muted/40 transition-colors text-left group rounded-sm"
-                    >
-                      <div className="flex-shrink-0">
-                        {phase.done ? (
-                          <CheckCircle2 className="w-5 h-5 text-green-500" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-muted-foreground/30" />
-                        )}
-                      </div>
-                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${phaseColors[idx]}`}>
-                        {phase.id}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium leading-tight ${phase.done ? "text-foreground" : "text-muted-foreground"}`}>
-                          {phase.label}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">{phase.hint}</p>
-                      </div>
-                      <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors flex-shrink-0" />
-                    </button>
-                  ))}
-                </div>
+              ) : wizardSteps.length > 0 ? (
+                <TNAWizard steps={wizardSteps} />
               ) : null}
             </CardContent>
           </Card>

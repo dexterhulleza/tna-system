@@ -176,4 +176,4 @@
 - [x] HR Officer TNA Workflow Recommendation Document (PDF + Markdown)
 - [ ] Staff CSV/Excel bulk import: allow HR Officers to upload staff profiles (name, position, department, duties) to pre-populate respondent data
 - [ ] Survey QR Code / shareable link per group: generate a direct link and QR code for each group's survey that pre-selects the group
-- [ ] TNA Setup Wizard page: guided step-by-step flow for new HR Officers to complete all 7 phases from a single page
+- [x] TNA Setup Wizard page: wizard-style step flow on AdminDashboard — horizontal step tabs (desktop), stepper/progress bar (mobile), locked/completed/error states, Back/Next nav, auto-advance on completion, explicit final confirmation, AI Provider excluded from HR Officer flow (admin-only)
