@@ -7,12 +7,14 @@ dist/
 build/
 *.dist
 
-# Environment variables
+# Environment variables — NEVER commit real secrets
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+# .env.example is safe to commit — contains only placeholder values
+!.env.example
 
 # IDE and editor files
 .vscode/
@@ -108,3 +110,13 @@ temp/
 
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
+.manus-logs/
+
+# Uploaded files / local storage (use S3 in production)
+uploads/
+storage/
+
+# PM2 logs
+*.pm2.log
+.pm2/
+logs/*.log

@@ -211,3 +211,12 @@
 - [x] Staff "No Survey Assigned" empty state — friendly message + contact HR prompt when staff has no active survey
 - [x] Survey share link per group — copy-to-clipboard URL button on ManageGroups card; ?group= pre-selects group in SurveyStart
 - [x] Inline "Create Group" form in wizard Step 1 — embed compact name+code form inside wizard Groups step; auto-invalidates checklist on create
+
+## QR Code + Production Deployment (Apr 19, 2026)
+- [x] QR code per group — "Download QR" button on ManageGroups group card (qrcode npm package, PNG download dialog)
+- [x] .env.example — all required env vars with placeholder values, no secrets
+- [x] .gitignore — node_modules, .env, dist, build artifacts, logs, uploads; !.env.example explicitly allowed
+- [x] README.md — local setup, env setup, build, production start, DB migration, VPS deployment, update workflow
+- [x] Production build verification — pnpm build runs cleanly (2026 modules, dist/index.js 161.9kb)
+- [x] Production start script — ecosystem.config.cjs for PM2 + update.sh one-liner deploy script
+- [x] Error handling hardening — NODE_ENV=production disables debug; PM2 restart policy configured

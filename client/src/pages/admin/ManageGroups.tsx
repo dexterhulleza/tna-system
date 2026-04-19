@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import QRCode from "qrcode";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Tag, Users, Info, Home, LayoutDashboard, ChevronRight, Link2, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, Users, Info, Home, LayoutDashboard, ChevronRight, Link2, Check, QrCode, Download } from "lucide-react";
 import { useLocation } from "wouter";
 
 type Group = {
@@ -66,6 +67,34 @@ export default function ManageGroups() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [copiedGroupId, setCopiedGroupId] = useState<number | null>(null);
+  const [qrGroupId, setQrGroupId] = useState<number | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const openQrDialog = async (groupId: number, groupName: string) => {
+    const url = `${window.location.origin}/survey/start?group=${groupId}`;
+    try {
+      const dataUrl = await QRCode.toDataURL(url, {
+        width: 400,
+        margin: 2,
+        color: { dark: "#1e293b", light: "#ffffff" },
+        errorCorrectionLevel: "H",
+      });
+      setQrDataUrl(dataUrl);
+      setQrGroupId(groupId);
+    } catch {
+      toast.error("Failed to generate QR code");
+    }
+  };
+
+  const downloadQr = (groupName: string, groupCode: string) => {
+    if (!qrDataUrl) return;
+    const link = document.createElement("a");
+    link.href = qrDataUrl;
+    link.download = `TNA-Survey-QR-${groupCode}.png`;
+    link.click();
+    toast.success(`QR code downloaded for ${groupName}`);
+  };
 
   const copyGroupLink = (groupId: number) => {
     const url = `${window.location.origin}/survey/start?group=${groupId}`;
@@ -250,11 +279,11 @@ export default function ManageGroups() {
                         <Badge variant="secondary" className="text-xs">All Sectors</Badge>
                       )}
                     </div>
-                    {/* Survey Share Link */}
-                    <div className="mt-3 pt-3 border-t border-border">
+                    {/* Survey Share Link + QR */}
+                    <div className="mt-3 pt-3 border-t border-border space-y-1">
                       <button
                         onClick={() => copyGroupLink(group.id)}
-                        className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors py-1 rounded group"
+                        className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors py-1 rounded"
                       >
                         {copiedGroupId === group.id
                           ? <Check className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
@@ -265,6 +294,13 @@ export default function ManageGroups() {
                         <span className="ml-auto text-[10px] font-mono text-muted-foreground/60 truncate max-w-[100px] hidden sm:block">
                           ?group={group.id}
                         </span>
+                      </button>
+                      <button
+                        onClick={() => openQrDialog(group.id, group.name)}
+                        className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors py-1 rounded"
+                      >
+                        <QrCode className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>Download QR code</span>
                       </button>
                     </div>
                   </CardContent>
@@ -395,6 +431,56 @@ export default function ManageGroups() {
               {upsert.isPending ? "Saving..." : form.id ? "Save Changes" : "Create Group"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* QR Code Dialog */}
+      <Dialog open={qrGroupId !== null} onOpenChange={(open) => { if (!open) { setQrGroupId(null); setQrDataUrl(null); } }}>
+        <DialogContent className="max-w-sm">
+          {(() => {
+            const group = groups?.find((g) => g.id === qrGroupId);
+            if (!group) return null;
+            const surveyUrl = `${window.location.origin}/survey/start?group=${group.id}`;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-display flex items-center gap-2">
+                    <QrCode className="w-5 h-5 text-primary" />
+                    QR Code — {group.name}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Staff can scan this QR code to open the survey directly for this group.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col items-center gap-4 py-2">
+                  {qrDataUrl && (
+                    <div className="p-3 bg-white rounded-xl border border-border shadow-sm">
+                      <img src={qrDataUrl} alt={`QR code for ${group.name}`} className="w-48 h-48" />
+                    </div>
+                  )}
+                  <div className="w-full">
+                    <p className="text-xs text-muted-foreground text-center mb-1">Survey URL</p>
+                    <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
+                      <span className="text-xs font-mono text-foreground truncate flex-1">{surveyUrl}</span>
+                      <button
+                        onClick={() => copyGroupLink(group.id)}
+                        className="text-muted-foreground hover:text-primary flex-shrink-0"
+                      >
+                        {copiedGroupId === group.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Link2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => { setQrGroupId(null); setQrDataUrl(null); }}>Close</Button>
+                  <Button onClick={() => downloadQr(group.name, group.code)} className="gap-2">
+                    <Download className="w-4 h-4" />
+                    Download PNG
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
