@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import AdminLayout from "./components/AdminLayout";
 import Home from "./pages/Home";
 import SurveyStart from "./pages/survey/SurveyStart";
 import SurveyQuestions from "./pages/survey/SurveyQuestions";
@@ -20,26 +21,41 @@ import SurveyConfiguration from "./pages/admin/SurveyConfiguration";
 import ProfileSetup from "./pages/ProfileSetup";
 import Dashboard from "./pages/Dashboard";
 
+/** Wrap a page component in AdminLayout */
+function withAdminLayout(Component: React.ComponentType) {
+  return function AdminPage() {
+    return (
+      <AdminLayout>
+        <Component />
+      </AdminLayout>
+    );
+  };
+}
+
 function Router() {
   return (
     <Switch>
+      {/* Public */}
       <Route path="/" component={Home} />
       <Route path="/profile-setup" component={ProfileSetup} />
+
+      {/* Staff portal */}
       <Route path="/dashboard" component={Dashboard} />
-      {/* Survey flow */}
       <Route path="/survey/start" component={SurveyStart} />
       <Route path="/survey/:surveyId/questions" component={SurveyQuestions} />
       <Route path="/survey/:surveyId/report" component={SurveyReport} />
       <Route path="/survey/history" component={SurveyHistory} />
-      {/* Admin panel */}
-      <Route path="/admin" component={AdminDashboard} />
-      <Route path="/admin/users" component={AdminUsers} />
-      <Route path="/admin/questions" component={AdminQuestions} />
-      <Route path="/admin/sectors" component={AdminSectors} />
-      <Route path="/admin/reports" component={AdminReports} />
-      <Route path="/admin/groups" component={ManageGroups} />
-      <Route path="/admin/survey-config" component={SurveyConfiguration} />
-      <Route path="/admin/ai-settings" component={AdminAISettings} />
+
+      {/* HR Officer / Admin panel — all wrapped in AdminLayout */}
+      <Route path="/admin" component={withAdminLayout(AdminDashboard)} />
+      <Route path="/admin/users" component={withAdminLayout(AdminUsers)} />
+      <Route path="/admin/questions" component={withAdminLayout(AdminQuestions)} />
+      <Route path="/admin/sectors" component={withAdminLayout(AdminSectors)} />
+      <Route path="/admin/reports" component={withAdminLayout(AdminReports)} />
+      <Route path="/admin/groups" component={withAdminLayout(ManageGroups)} />
+      <Route path="/admin/survey-config" component={withAdminLayout(SurveyConfiguration)} />
+      <Route path="/admin/ai-settings" component={withAdminLayout(AdminAISettings)} />
+
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

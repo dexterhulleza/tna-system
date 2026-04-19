@@ -177,3 +177,19 @@
 - [ ] Staff CSV/Excel bulk import: allow HR Officers to upload staff profiles (name, position, department, duties) to pre-populate respondent data
 - [ ] Survey QR Code / shareable link per group: generate a direct link and QR code for each group's survey that pre-selects the group
 - [x] TNA Setup Wizard page: wizard-style step flow on AdminDashboard — horizontal step tabs (desktop), stepper/progress bar (mobile), locked/completed/error states, Back/Next nav, auto-advance on completion, explicit final confirmation, AI Provider excluded from HR Officer flow (admin-only)
+
+## Full UI/UX Redesign (Apr 2026)
+- [x] AdminLayout: shared sidebar wrapper for all admin/HR pages (nav, user avatar, logout)
+- [x] StaffLayout: shared sidebar wrapper for staff pages
+- [x] Landing Page: redesign with hero, how-it-works, role cards (HR vs Staff), footer
+- [x] Role-based routing: Start Assessment button checks login + role + profile completeness
+- [ ] Access Denied page: clean error state with role mismatch, incomplete profile, no group
+- [ ] No Assigned Survey page: empty state for staff with no active survey
+- [x] HR Officer Dashboard: stats cards, wizard, quick actions (wrapped in AdminLayout)
+- [ ] Campaign Management page: list, search, filter, status badges, actions
+- [ ] Create/Edit Campaign wizard: 5-step form (Details, Groups, Questions, Schedule, Review)
+- [x] Staff Dashboard: simplified dashboard with assigned surveys, completed history (StaffLayout)
+- [ ] Staff Survey page: distraction-free questionnaire with progress bar, section nav
+- [ ] Settings page: profile, password, notifications, organization tabs
+- [ ] Reports page: charts, summary cards, export (wrapped in AdminLayout)
+- [ ] Mobile responsiveness: hamburger menu, responsive grids, touch targets
