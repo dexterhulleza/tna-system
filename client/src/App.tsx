@@ -18,7 +18,8 @@ import AdminReports from "./pages/admin/AdminReports";
 import AdminAISettings from "./pages/admin/AdminAISettings";
 import ManageGroups from "./pages/admin/ManageGroups";
 import CreateSurveyGroup from "./pages/admin/CreateSurveyGroup";
-import CompanyInfo from "./pages/admin/CompanyInfo";
+import CompanyInfo from "@/pages/admin/CompanyInfo";
+import AdminResults from "@/pages/admin/AdminResults";
 import SurveyConfiguration from "./pages/admin/SurveyConfiguration";
 import ProfileSetup from "./pages/ProfileSetup";
 import Dashboard from "./pages/Dashboard";
@@ -58,7 +59,8 @@ function Router() {
       <Route path="/admin/survey-groups/create" component={withAdminLayout(CreateSurveyGroup)} />
       <Route path="/admin/survey-config" component={withAdminLayout(SurveyConfiguration)} />
       <Route path="/admin/ai-settings" component={withAdminLayout(AdminAISettings)} />
-      <Route path="/admin/company-info" component={withAdminLayout(CompanyInfo)} />
+        <Route path="/admin/company-info" component={CompanyInfo} />
+        <Route path="/admin/results" component={AdminResults} />
 
       {/* Fallback */}
       <Route path="/404" component={NotFound} />

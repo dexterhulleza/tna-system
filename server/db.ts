@@ -128,6 +128,7 @@ export async function upsertSurveyGroup(data: {
   sectorId?: number | null;
   isActive?: boolean;
   sortOrder?: number;
+  expectedCount?: number;
   createdBy?: number;
 }) {
   const db = await getDb();

@@ -1,0 +1,1 @@
+ALTER TABLE `survey_groups` ADD `expectedCount` int DEFAULT 0;

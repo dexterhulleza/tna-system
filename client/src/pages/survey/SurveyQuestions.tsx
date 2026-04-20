@@ -13,7 +13,7 @@ import { trpc } from "@/lib/trpc";
 import { useLocation, useParams } from "wouter";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, ListChecks, Save } from "lucide-react";
 import { CATEGORY_LABELS, CATEGORY_DESCRIPTIONS, type QuestionCategory } from "@/types/tna";
 
 const CATEGORIES: QuestionCategory[] = [
@@ -55,6 +55,8 @@ export default function SurveyQuestions() {
   const [responses, setResponses] = useState<ResponseState>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   const id = parseInt(surveyId || "0");
   const currentCategory = CATEGORIES[currentCategoryIndex];
@@ -111,22 +113,31 @@ export default function SurveyQuestions() {
       responseOptions: responses[q.id]?.responseOptions,
     }));
 
+    setAutoSaveStatus("saving");
     try {
       await saveResponses.mutateAsync({ surveyId: id, responses: categoryResponses, currentCategory });
     } catch {
       toast.error("Failed to save responses");
       setIsSaving(false);
+      setAutoSaveStatus("idle");
       return;
     }
+    setAutoSaveStatus("saved");
+    setTimeout(() => setAutoSaveStatus("idle"), 2500);
     setIsSaving(false);
 
     if (currentCategoryIndex < CATEGORIES.length - 1) {
       setCurrentCategoryIndex((prev) => prev + 1);
       window.scrollTo(0, 0);
     } else {
-      setIsCompleting(true);
-      completeSurvey.mutate({ surveyId: id });
+      // Show review screen before final submit
+      setShowReview(true);
     }
+  };
+
+  const handleFinalSubmit = () => {
+    setIsCompleting(true);
+    completeSurvey.mutate({ surveyId: id });
   };
 
   const handleBack = () => {
@@ -140,6 +151,61 @@ export default function SurveyQuestions() {
 
   const isLastCategory = currentCategoryIndex === CATEGORIES.length - 1;
   const progressPct = ((currentCategoryIndex + 1) / CATEGORIES.length) * 100;
+  const answeredCount = Object.keys(responses).length;
+
+  // ── REVIEW SCREEN ──
+  if (showReview) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
+          <div className="flex items-center justify-between px-4 py-3 max-w-2xl mx-auto w-full">
+            <button onClick={() => setShowReview(false)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors">
+              <ArrowLeft className="w-4 h-4" />
+              Back to Questions
+            </button>
+            <span className="text-sm font-semibold text-slate-700">Review Answers</span>
+            <span className="text-xs text-slate-400">{answeredCount} answered</span>
+          </div>
+        </header>
+        <main className="flex-1 px-4 py-8 pb-28 max-w-2xl mx-auto w-full">
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-2">
+              <ListChecks className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <p className="text-sm font-medium text-blue-800">All sections complete. Review below then submit.</p>
+            </div>
+            {CATEGORIES.map((cat, i) => (
+              <div key={cat} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${CATEGORY_ACCENT[cat]}`} />
+                    <span className="text-sm font-semibold text-slate-800">{CATEGORY_LABELS[cat]}</span>
+                  </div>
+                  <button onClick={() => { setShowReview(false); setCurrentCategoryIndex(i); window.scrollTo(0,0); }} className="text-xs text-primary hover:underline">Edit</button>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-xs text-slate-500">{CATEGORY_DESCRIPTIONS[cat]}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                    <span className="text-xs text-green-700">Section completed</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
+        <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-slate-200 px-4 py-3">
+          <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+            <Button variant="outline" onClick={() => setShowReview(false)}>
+              <ArrowLeft className="w-4 h-4 mr-1.5" />Back
+            </Button>
+            <Button onClick={handleFinalSubmit} disabled={isCompleting} className="flex-1 max-w-xs">
+              {isCompleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4 mr-1.5" />Submit Assessment</>}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (surveyLoading) {
     return (

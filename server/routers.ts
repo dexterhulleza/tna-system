@@ -119,6 +119,7 @@ export const appRouter = router({
           sectorId: z.number().nullable().optional(),
           isActive: z.boolean().optional(),
           sortOrder: z.number().optional(),
+          expectedCount: z.number().min(0).optional(),
         })
       )
       .mutation(({ ctx, input }) => upsertSurveyGroup({ ...input, createdBy: ctx.user.id })),

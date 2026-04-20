@@ -40,6 +40,7 @@ type Group = {
   sectorId: number | null;
   isActive: boolean;
   sortOrder: number | null;
+  expectedCount: number | null;
   createdAt: Date;
 };
 
@@ -68,6 +69,8 @@ export default function ManageGroups() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [copiedGroupId, setCopiedGroupId] = useState<number | null>(null);
+  const [staffCountGroupId, setStaffCountGroupId] = useState<number | null>(null);
+  const [staffCountInput, setStaffCountInput] = useState<string>("");
   const [qrGroupId, setQrGroupId] = useState<number | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -108,6 +111,37 @@ export default function ManageGroups() {
 
   const utils = trpc.useUtils();
   const { data: groups, isLoading } = trpc.groups.list.useQuery({ activeOnly: false });
+
+  const setExpectedCount = trpc.groups.upsert.useMutation({
+    onSuccess: () => {
+      toast.success("Expected participant count updated.");
+      utils.groups.list.invalidate();
+      setStaffCountGroupId(null);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const openStaffCountDialog = (group: Group) => {
+    setStaffCountInput(String(group.expectedCount ?? 0));
+    setStaffCountGroupId(group.id);
+  };
+
+  const handleSetStaffCount = () => {
+    if (!staffCountGroupId) return;
+    const group = groups?.find(g => g.id === staffCountGroupId);
+    if (!group) return;
+    const count = parseInt(staffCountInput) || 0;
+    setExpectedCount.mutate({
+      id: group.id,
+      name: group.name,
+      code: group.code,
+      description: group.description ?? undefined,
+      sectorId: group.sectorId,
+      isActive: group.isActive,
+      sortOrder: group.sortOrder ?? 0,
+      expectedCount: count,
+    });
+  };
   const { data: sectors } = trpc.sectors.list.useQuery({ activeOnly: true });
 
   const upsert = trpc.groups.upsert.useMutation({
@@ -325,8 +359,28 @@ export default function ManageGroups() {
                         <Badge variant="secondary" className="text-xs">All Sectors</Badge>
                       )}
                     </div>
+                    {/* Expected Count + Progress */}
+                    <div className="mt-3 pt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">
+                          {(group as Group).expectedCount && (group as Group).expectedCount! > 0
+                            ? `0 / ${(group as Group).expectedCount} responded`
+                            : "No expected count set"}
+                        </span>
+                        <button
+                          onClick={() => openStaffCountDialog(group as Group)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          <Users className="w-3 h-3" />
+                          {(group as Group).expectedCount ? "Edit" : "Set count"}
+                        </button>
+                      </div>
+                      {(group as Group).expectedCount && (group as Group).expectedCount! > 0 && (
+                        <Progress value={0} className="h-1.5" />
+                      )}
+                    </div>
                     {/* Survey Share Link + QR */}
-                    <div className="mt-3 pt-3 border-t border-border space-y-1">
+                    <div className="mt-2 pt-2 border-t border-border space-y-1">
                       <button
                         onClick={() => copyGroupLink(group.id)}
                         className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors py-1 rounded"
@@ -522,6 +576,48 @@ export default function ManageGroups() {
                   <Button onClick={() => downloadQr(group.name, group.code)} className="gap-2">
                     <Download className="w-4 h-4" />
                     Download PNG
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Set Expected Staff Count Dialog */}
+      <Dialog open={staffCountGroupId !== null} onOpenChange={(open) => { if (!open) setStaffCountGroupId(null); }}>
+        <DialogContent className="max-w-sm">
+          {(() => {
+            const group = groups?.find(g => g.id === staffCountGroupId);
+            if (!group) return null;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-display flex items-center gap-2">
+                    <Users className="w-5 h-5 text-primary" />
+                    Set Expected Participants
+                  </DialogTitle>
+                  <DialogDescription>
+                    How many staff members are expected to complete the survey for <strong>{group.name}</strong>? This is used to calculate the response rate progress bar.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-2">
+                  <Label htmlFor="staffCount">Expected Participant Count</Label>
+                  <Input
+                    id="staffCount"
+                    type="number"
+                    min="0"
+                    placeholder="e.g., 30"
+                    value={staffCountInput}
+                    onChange={(e) => setStaffCountInput(e.target.value)}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Enter 0 to clear the expected count.</p>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setStaffCountGroupId(null)}>Cancel</Button>
+                  <Button onClick={handleSetStaffCount} disabled={setExpectedCount.isPending}>
+                    {setExpectedCount.isPending ? "Saving..." : "Save"}
                   </Button>
                 </DialogFooter>
               </>

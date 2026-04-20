@@ -228,3 +228,26 @@
 - [x] Create Survey Group wizard: 5-step (Info → Participants → Questionnaire → Schedule → Review)
 - [x] Company Information page: editable form (org name, industry, TNA purpose, participants, regulatory requirements, notes) — stored in surveyConfig groupId=0
 - [x] Other Outputs module: nav links in AdminLayout sidebar (Results & Analytics, Training Plans, Recommendations, Reports Archive)
+
+## Staff UX Complete Redesign + Analytics (Apr 20, 2026)
+### Staff respondent count
+- [ ] DB: add expectedCount field to survey_groups table (migration)
+- [ ] Backend: update groups.upsert to accept expectedCount
+- [ ] Frontend: Add Staff button on ManageGroups group card — modal to set expected participant count
+- [ ] Frontend: AdminDashboard progress bars use respondedCount/expectedCount for real percentage
+
+### Staff experience (15 screens)
+- [ ] Staff Dashboard: welcome, assigned group card, status (Not Started/In Progress/Submitted/Closed), Start/Continue Assessment CTA
+- [ ] Staff Profile page: name, email, mobile, department, position, update + change password
+- [ ] No Assigned Survey page: friendly empty state, contact HR, refresh button
+- [ ] Survey Closed page: deadline passed message, contact HR note
+- [ ] Survey Questionnaire: section nav, question counter, auto-save indicator, sticky Back/Next/Save Draft
+- [ ] Review Answers page: summary of all answers, highlight unanswered, edit per question
+- [ ] Submission Confirmation modal: "answers cannot be edited after submission" warning
+- [ ] Success/Completion page: success icon, date submitted, reference number, return to dashboard
+- [ ] Continue Assessment flow: resume from last saved question
+- [ ] Staff top nav: Dashboard, My Assessment, Profile, Logout (no HR features)
+
+### Results & Analytics page (admin)
+- [ ] /admin/results page: response rate chart per group, category score breakdown bars, top skill gaps across all groups
+- [ ] Tabbed layout: Overview, By Group, By Category, Skill Gaps

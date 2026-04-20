@@ -43,11 +43,11 @@ export const surveyGroups = mysqlTable("survey_groups", {
   sectorId: int("sectorId"),
   isActive: boolean("isActive").default(true).notNull(),
   sortOrder: int("sortOrder").default(0),
+  expectedCount: int("expectedCount").default(0),
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
-
 export type SurveyGroup = typeof surveyGroups.$inferSelect;
 export type InsertSurveyGroup = typeof surveyGroups.$inferInsert;
 
