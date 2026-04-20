@@ -3,7 +3,7 @@
  * Steps: 1. Group Info → 2. Participants → 3. Questionnaire → 4. Schedule → 5. Review & Create
  * ONE OBJECTIVE: Create a new survey group with all required settings.
  */
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,9 @@ import {
   CheckCircle2, Circle, ChevronRight, ChevronLeft, Tag, Users, ClipboardList,
   Calendar, Eye, Loader2, Check, AlertCircle, ArrowLeft,
   QrCode, Upload, Search, Plus, Trash2, Download, Link2, UserPlus, FileSpreadsheet,
-  BookOpen, PenLine,
+  BookOpen, PenLine, Copy, ExternalLink, LayoutDashboard, ListChecks,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -945,6 +946,131 @@ function Step5({ form, sectors }: { form: WizardForm; sectors: { id: number; nam
 }
 
 // ─── Main Wizard Component ────────────────────────────────────────────────────
+// ─── Success Screen ──────────────────────────────────────────────────────────
+function SuccessScreen({
+  groupId,
+  groupName,
+  groupCode,
+  onNavigate,
+}: {
+  groupId: number;
+  groupName: string;
+  groupCode: string;
+  onNavigate: (path: string) => void;
+}) {
+  const surveyUrl = `${window.location.origin}/survey/start?group=${groupId}`;
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Generate QR code on mount
+  useEffect(() => {
+    QRCode.toDataURL(surveyUrl, {
+      width: 280,
+      margin: 2,
+      color: { dark: "#1e293b", light: "#ffffff" },
+      errorCorrectionLevel: "H",
+    }).then(setQrDataUrl).catch(console.error);
+  }, [surveyUrl]);
+
+  const copyLink = useCallback(() => {
+    navigator.clipboard.writeText(surveyUrl).then(() => {
+      setCopied(true);
+      toast.success("Survey link copied!");
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [surveyUrl]);
+
+  const downloadQR = useCallback(() => {
+    if (!qrDataUrl) return;
+    const a = document.createElement("a");
+    a.href = qrDataUrl;
+    a.download = `TNA-Survey-QR-${groupCode}.png`;
+    a.click();
+  }, [qrDataUrl, groupCode]);
+
+  return (
+    <div className="py-6">
+      {/* Success header */}
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+          <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900">Group Created!</h2>
+        <p className="text-slate-500 mt-1 text-sm">
+          <strong className="text-slate-700">{groupName}</strong> is ready. Share the QR code or link with your staff.
+        </p>
+      </div>
+
+      {/* QR + Link panel */}
+      <div className="flex flex-col md:flex-row gap-6 items-start justify-center">
+        {/* QR Code */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 shadow-sm">
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="Survey QR Code" className="w-52 h-52" />
+            ) : (
+              <div className="w-52 h-52 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+              </div>
+            )}
+          </div>
+          <Button
+            onClick={downloadQR}
+            disabled={!qrDataUrl}
+            variant="outline"
+            className="gap-2 w-full"
+          >
+            <Download className="w-4 h-4" />
+            Download QR PNG
+          </Button>
+        </div>
+
+        {/* Link + instructions */}
+        <div className="flex-1 min-w-0 space-y-4">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Survey Link</p>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              <Link2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <span className="text-sm text-slate-700 truncate flex-1 font-mono">{surveyUrl}</span>
+              <button
+                onClick={copyLink}
+                className="flex-shrink-0 p-1 rounded hover:bg-slate-200 transition-colors"
+                title="Copy link"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 space-y-2">
+            <p className="text-sm font-semibold text-blue-800">How to share with staff</p>
+            <ul className="text-sm text-blue-700 space-y-1">
+              <li className="flex items-start gap-2"><span className="mt-0.5 font-bold">1.</span> Print the QR code and post it in the workplace, OR</li>
+              <li className="flex items-start gap-2"><span className="mt-0.5 font-bold">2.</span> Send the survey link via email, chat, or SMS.</li>
+              <li className="flex items-start gap-2"><span className="mt-0.5 font-bold">3.</span> Staff open the link, log in, and their response is automatically recorded under this group.</li>
+            </ul>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Button onClick={() => onNavigate("/admin/groups")} className="gap-2 flex-1">
+              <ListChecks className="w-4 h-4" />
+              View Survey Groups
+            </Button>
+            <Button variant="outline" onClick={() => onNavigate("/admin")} className="gap-2 flex-1">
+              <LayoutDashboard className="w-4 h-4" />
+              Go to Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CreateSurveyGroup() {
   const [, navigate] = useLocation();
   const [currentStep, setCurrentStep] = useState(1);
@@ -1030,28 +1156,7 @@ export default function CreateSurveyGroup() {
       {/* Step content */}
       <div ref={contentRef} className="bg-white rounded-xl border border-slate-200 p-6 mb-4">
         {isCreated ? (
-          // Success state
-          <div className="text-center py-8 space-y-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">Group Created!</h2>
-              <p className="text-slate-500 mt-2">
-                <strong>{form.name}</strong> has been created successfully.
-                Share the survey link with your staff to start collecting TNA data.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-              <Button onClick={() => navigate("/admin/groups")} className="gap-2">
-                <ClipboardList className="w-4 h-4" />
-                View Survey Groups
-              </Button>
-              <Button variant="outline" onClick={() => navigate("/admin")} className="gap-2">
-                Go to Dashboard
-              </Button>
-            </div>
-          </div>
+          <SuccessScreen groupId={createdGroupId!} groupName={form.name} groupCode={form.code} onNavigate={navigate} />
         ) : (
           <>
             {currentStep === 1 && <Step1 form={form} onChange={updateForm} sectors={sectors ?? []} />}
