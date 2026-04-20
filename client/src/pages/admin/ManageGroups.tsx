@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Tag, Users, Info, Home, LayoutDashboard, ChevronRight, Link2, Check, QrCode, Download } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, Users, Info, Home, LayoutDashboard, ChevronRight, Link2, Check, QrCode, Download, Search, Filter, BarChart2, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { useLocation } from "wouter";
 
 type Group = {
@@ -162,35 +163,80 @@ export default function ManageGroups() {
     });
   };
 
-  const activeGroups = groups?.filter((g) => g.isActive) ?? [];
-  const inactiveGroups = groups?.filter((g) => !g.isActive) ?? [];
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const allGroups = groups ?? [];
+  const filteredGroups = allGroups.filter((g) => {
+    const matchesSearch = !search || g.name.toLowerCase().includes(search.toLowerCase()) || g.code.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? g.isActive : !g.isActive);
+    return matchesSearch && matchesStatus;
+  });
+  const activeGroups = filteredGroups.filter((g) => g.isActive);
+  const inactiveGroups = filteredGroups.filter((g) => !g.isActive);
+  const totalActive = allGroups.filter(g => g.isActive).length;
+  const totalInactive = allGroups.filter(g => !g.isActive).length;
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <button onClick={() => navigate("/")} className="flex items-center gap-1 hover:text-foreground transition-colors">
-          <Home className="w-3.5 h-3.5" /><span>Home</span>
-        </button>
-        <ChevronRight className="w-3.5 h-3.5" />
-        <button onClick={() => navigate("/admin")} className="flex items-center gap-1 hover:text-foreground transition-colors">
-          <LayoutDashboard className="w-3.5 h-3.5" /><span>Admin Dashboard</span>
-        </button>
-        <ChevronRight className="w-3.5 h-3.5" />
-        <span className="text-foreground font-medium">Manage Groups</span>
-      </nav>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold text-foreground">Manage Groups</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Create and manage group tags that can be assigned to surveys for cohort-level TNA analysis.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">Survey Groups</h1>
+          <p className="text-slate-500 text-sm mt-1">Manage cohort groups for TNA surveys. Share links or QR codes with staff.</p>
         </div>
-        <Button onClick={openCreate} className="gap-2">
+        <Button onClick={openCreate} className="gap-2 self-start flex-shrink-0">
           <Plus className="w-4 h-4" />
           New Group
         </Button>
+      </div>
+
+      {/* Stats Strip */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Total Groups", value: allGroups.length, icon: Tag, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Active", value: totalActive, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
+          { label: "Inactive", value: totalInactive, icon: XCircle, color: "text-slate-500", bg: "bg-slate-100" },
+        ].map(s => (
+          <div key={s.label} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${s.bg}`}>
+              <s.icon className={`w-4 h-4 ${s.color}`} />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{s.value}</p>
+              <p className="text-xs text-slate-500">{s.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Search + Filter Bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by group name or code…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+        </div>
+        <div className="flex gap-2">
+          {(["all", "active", "inactive"] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                statusFilter === f
+                  ? "bg-primary text-white border-primary"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Info Banner */}

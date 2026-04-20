@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -11,23 +11,29 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard,
   BookOpen,
   Users,
-  Tag,
   BarChart3,
   Settings,
-  Sparkles,
   Bot,
   Menu,
   X,
   LogOut,
   ChevronDown,
+  ChevronRight,
   Home,
-  FileText,
+  PlusCircle,
+  ClipboardList,
+  TrendingUp,
+  GraduationCap,
+  Lightbulb,
+  Building2,
+  FileBarChart,
+  HelpCircle,
   Globe,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,25 +42,55 @@ interface NavItem {
   label: string;
   path: string;
   adminOnly?: boolean;
-  badge?: string;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { icon: LayoutDashboard, label: "Campaign", path: "/admin" },
-  { icon: Tag, label: "Groups", path: "/admin/groups" },
-  { icon: Sparkles, label: "Survey Setup", path: "/admin/survey-config" },
-  { icon: Users, label: "Staff", path: "/admin/users" },
-  { icon: BarChart3, label: "Reports", path: "/admin/reports" },
-];
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+  collapsible?: boolean;
+}
 
-// Settings sub-items — shown under a collapsible Settings section
-const SETTINGS_ITEMS: NavItem[] = [
-  { icon: BookOpen, label: "Questions", path: "/admin/questions" },
-  { icon: Globe, label: "Sectors", path: "/admin/sectors" },
-  { icon: Bot, label: "AI Provider", path: "/admin/ai-settings" },
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Main",
+    items: [
+      { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
+    ],
+  },
+  {
+    label: "Survey Management",
+    items: [
+      { icon: ClipboardList, label: "Survey Groups", path: "/admin/groups" },
+      { icon: PlusCircle, label: "Create Survey Group", path: "/admin/survey-groups/create" },
+      { icon: HelpCircle, label: "Questionnaires", path: "/admin/survey-config" },
+    ],
+  },
+  {
+    label: "Outputs",
+    items: [
+      { icon: TrendingUp, label: "Results & Analytics", path: "/admin/results" },
+      { icon: GraduationCap, label: "Training Plans", path: "/admin/training-plans" },
+      { icon: Lightbulb, label: "Recommendations", path: "/admin/recommendations" },
+      { icon: FileBarChart, label: "Reports", path: "/admin/reports" },
+    ],
+  },
+  {
+    label: "Organization",
+    items: [
+      { icon: Users, label: "Staff", path: "/admin/users" },
+      { icon: Building2, label: "Company Info", path: "/admin/company-info" },
+    ],
+  },
+  {
+    label: "Settings",
+    collapsible: true,
+    items: [
+      { icon: BookOpen, label: "Questions", path: "/admin/questions" },
+      { icon: Globe, label: "Sectors", path: "/admin/sectors" },
+      { icon: Bot, label: "AI Provider", path: "/admin/ai-settings", adminOnly: true },
+    ],
+  },
 ];
-
-const ADMIN_ONLY_ITEMS: NavItem[] = [];
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -62,146 +98,150 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Redirect to login if not authenticated
-  if (!loading && !isAuthenticated) {
-    window.location.href = getLoginUrl("/admin");
-    return null;
-  }
-
-  // Redirect non-admin users
-  if (!loading && user && user.role !== "admin") {
-    navigate("/dashboard");
-    return null;
-  }
-
-  const isActive = (path: string) => {
-    if (path === "/admin") return location === "/admin";
-    return location.startsWith(path);
-  };
+  // Auto-open settings if current path is under settings
+  const isInSettings = ["/admin/questions", "/admin/sectors", "/admin/ai-settings"].some(p =>
+    location.startsWith(p)
+  );
 
   const handleLogout = async () => {
     await logout();
     navigate("/");
   };
 
-  const [settingsOpen, setSettingsOpen] = useState(
-    SETTINGS_ITEMS.some((i) => isActive(i.path))
-  );
+  function NavLinks({ onItemClick }: { onItemClick?: () => void }) {
+    return (
+      <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
+        {NAV_GROUPS.map((group) => {
+          const isSettings = group.collapsible;
+          const expanded = isSettings ? (settingsOpen || isInSettings) : true;
 
-  const NavLinks = ({ onItemClick }: { onItemClick?: () => void }) => (
-    <nav className="flex-1 overflow-y-auto py-4">
-      <div className="px-3 space-y-0.5">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.path}
-            onClick={() => { navigate(item.path); onItemClick?.(); }}
-            className={cn(
-              "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-              isActive(item.path)
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            )}
-          >
-            <item.icon className="w-4 h-4 flex-shrink-0" />
-            <span>{item.label}</span>
-          </button>
-        ))}
+          return (
+            <div key={group.label}>
+              {/* Group header */}
+              {isSettings ? (
+                <button
+                  onClick={() => setSettingsOpen(v => !v)}
+                  className="flex items-center justify-between w-full px-2 py-1 mb-1 group"
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 group-hover:text-slate-600 transition-colors">
+                    {group.label}
+                  </span>
+                  {expanded
+                    ? <ChevronDown className="w-3 h-3 text-slate-400" />
+                    : <ChevronRight className="w-3 h-3 text-slate-400" />
+                  }
+                </button>
+              ) : (
+                <p className="px-2 py-1 mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  {group.label}
+                </p>
+              )}
 
-        {/* Settings — collapsible, hides advanced config */}
-        <button
-          onClick={() => setSettingsOpen(!settingsOpen)}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-            settingsOpen || SETTINGS_ITEMS.some((i) => isActive(i.path))
-              ? "text-slate-900 bg-slate-100"
-              : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-          )}
-        >
-          <Settings className="w-4 h-4 flex-shrink-0" />
-          <span>Settings</span>
-          <ChevronDown className={cn("w-3.5 h-3.5 ml-auto transition-transform", settingsOpen && "rotate-180")} />
-        </button>
+              {/* Group items */}
+              {expanded && (
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const active = location === item.path || (item.path !== "/admin" && location.startsWith(item.path));
+                    return (
+                      <button
+                        key={item.path}
+                        onClick={() => { navigate(item.path); onItemClick?.(); }}
+                        className={cn(
+                          "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left",
+                          active
+                            ? "bg-primary text-white shadow-sm"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        )}
+                      >
+                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                        {item.adminOnly && (
+                          <span className={cn(
+                            "ml-auto text-[9px] font-bold uppercase px-1.5 py-0.5 rounded",
+                            active ? "bg-white/20 text-white" : "bg-amber-100 text-amber-700"
+                          )}>
+                            Admin
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+    );
+  }
 
-        {settingsOpen && (
-          <div className="ml-3 pl-3 border-l border-slate-200 space-y-0.5">
-            {SETTINGS_ITEMS.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => { navigate(item.path); onItemClick?.(); }}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
-                  isActive(item.path)
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                )}
-              >
-                <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
+  const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => (
+    <>
+      {/* Logo */}
+      <div className="flex items-center gap-3 h-16 px-5 border-b border-slate-200 flex-shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+          <Layers className="w-4 h-4 text-white" />
+        </div>
+        <div>
+          <p className="font-bold text-slate-900 text-sm leading-none">TNA System</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {user?.tnaRole === "admin" ? "Administrator" : "HR Officer Panel"}
+          </p>
+        </div>
       </div>
-    </nav>
+
+      {/* Nav */}
+      <NavLinks onItemClick={onItemClick} />
+
+      {/* User footer */}
+      <div className="border-t border-slate-200 p-3 flex-shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-3 w-full px-2 py-2 rounded-lg hover:bg-slate-100 transition-colors text-left">
+              <Avatar className="h-8 w-8 flex-shrink-0">
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                  {user?.name?.charAt(0)?.toUpperCase() ?? "U"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate leading-none">{user?.name ?? "User"}</p>
+                <p className="text-xs text-slate-500 truncate mt-0.5">{user?.email ?? ""}</p>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => navigate("/")}>
+              <Home className="mr-2 h-4 w-4" />
+              Home
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/profile-setup")}>
+              <Settings className="mr-2 h-4 w-4" />
+              Profile Settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="flex min-h-screen bg-slate-50">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-60 bg-white border-r border-slate-200 fixed inset-y-0 left-0 z-30">
-        {/* Logo */}
-        <div className="flex items-center gap-3 h-16 px-5 border-b border-slate-200 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-            <BookOpen className="w-4 h-4 text-white" />
-          </div>
-          <div className="min-w-0">
-            <p className="font-bold text-slate-900 text-sm leading-none truncate">TNA System</p>
-            <p className="text-xs text-slate-500 mt-0.5 leading-none">HR Officer Panel</p>
-          </div>
-        </div>
-
-        <NavLinks />
-
-        {/* User footer */}
-        <div className="border-t border-slate-200 p-3 flex-shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-100 transition-colors text-left">
-                <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                    {user?.name?.charAt(0)?.toUpperCase() ?? "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate leading-none">{user?.name ?? "User"}</p>
-                  <p className="text-xs text-slate-500 truncate mt-0.5">{user?.email ?? ""}</p>
-                </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => navigate("/")}>
-                <Home className="mr-2 h-4 w-4" />
-                Home
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate("/profile-setup")}>
-                <Settings className="mr-2 h-4 w-4" />
-                Profile Settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+      <aside className="hidden lg:flex lg:flex-col fixed inset-y-0 left-0 w-60 bg-white border-r border-slate-200 z-30">
+        <SidebarContent />
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
+      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -219,7 +259,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <div className="flex items-center justify-between h-16 px-5 border-b border-slate-200 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <BookOpen className="w-4 h-4 text-white" />
+              <Layers className="w-4 h-4 text-white" />
             </div>
             <div>
               <p className="font-bold text-slate-900 text-sm leading-none">TNA System</p>
@@ -265,7 +305,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </button>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <BookOpen className="w-3.5 h-3.5 text-white" />
+              <Layers className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="font-bold text-slate-900 text-sm">TNA System</span>
           </div>

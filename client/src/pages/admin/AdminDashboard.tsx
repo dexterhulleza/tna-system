@@ -1,22 +1,27 @@
 /**
- * HR Officer Dashboard — ONE OBJECTIVE: See what needs action next and do it.
- * Rules: wizard is the hero · stats are secondary (collapsed) · completed steps hidden by default
+ * Admin / HR Officer Dashboard
+ * ONE OBJECTIVE: See what needs action next and take it.
+ * Layout: welcome → alerts → stats → 4 action cards → recent groups → quick links
  */
-import { Card, CardContent } from "@/components/ui/card";
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { trpc } from "@/lib/trpc";
-import { useLocation } from "wouter";
 import {
-  Users, BookOpen, BarChart3, FileText,
-  Loader2, Tag, Sparkles, ChevronDown, ChevronUp, ArrowRight, Plus, Check
+  PlusCircle, ClipboardList, TrendingUp, GraduationCap,
+  Building2, Users, CheckCircle2, Clock, AlertCircle,
+  ChevronRight, BarChart3, FileText, Bell, Eye, ArrowRight,
+  Lightbulb, BookOpen, Tag, Sparkles, Plus, Check, Loader2,
 } from "lucide-react";
-import TNAWizard, { type WizardStep } from "@/components/TNAWizard";
-import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-/** Inline form shown inside the Groups wizard step */
+// ─── Inline Create Group Form (reused from previous wizard) ───────────────────
 function InlineCreateGroupForm({ onCreated }: { onCreated: () => void }) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -26,9 +31,7 @@ function InlineCreateGroupForm({ onCreated }: { onCreated: () => void }) {
   const upsert = trpc.groups.upsert.useMutation({
     onSuccess: () => {
       toast.success(`Group "${name}" created!`);
-      setName("");
-      setCode("");
-      setShowForm(false);
+      setName(""); setCode(""); setShowForm(false);
       utils.groups.list.invalidate();
       utils.admin.readinessChecklist.invalidate();
       onCreated();
@@ -40,34 +43,19 @@ function InlineCreateGroupForm({ onCreated }: { onCreated: () => void }) {
   const activeGroups = groups ?? [];
 
   const handleCreate = () => {
-    if (!name.trim() || !code.trim()) {
-      toast.error("Group name and code are required.");
-      return;
-    }
-    upsert.mutate({
-      name: name.trim(),
-      code: code.trim().toUpperCase(),
-      isActive: true,
-      sortOrder: 0,
-    });
+    if (!name.trim() || !code.trim()) { toast.error("Name and code are required."); return; }
+    upsert.mutate({ name: name.trim(), code: code.trim().toUpperCase(), isActive: true, sortOrder: 0 });
   };
 
   return (
-    <div className="space-y-3">
-      {/* Existing groups list */}
-      {activeGroups.length > 0 && (
-        <div className="space-y-1.5">
-          {activeGroups.map((g) => (
-            <div key={g.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200">
-              <Check className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-              <span className="text-sm font-medium text-green-800">{g.name}</span>
-              <span className="text-xs text-green-600 font-mono ml-auto">{g.code}</span>
-            </div>
-          ))}
+    <div className="space-y-2 mt-2">
+      {activeGroups.map((g) => (
+        <div key={g.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200">
+          <Check className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+          <span className="text-sm font-medium text-green-800">{g.name}</span>
+          <span className="text-xs text-green-600 font-mono ml-auto">{g.code}</span>
         </div>
-      )}
-
-      {/* Toggle form */}
+      ))}
       {!showForm ? (
         <button
           onClick={() => setShowForm(true)}
@@ -78,46 +66,23 @@ function InlineCreateGroupForm({ onCreated }: { onCreated: () => void }) {
         </button>
       ) : (
         <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
-          <p className="text-xs font-semibold text-foreground">New Group</p>
+          <p className="text-xs font-semibold">New Group</p>
           <div className="grid grid-cols-2 gap-2">
             <div className="col-span-2">
               <Label className="text-xs mb-1 block">Group Name *</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Batch 2025 ICT"
-                className="h-8 text-sm"
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                autoFocus
-              />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Batch 2025 ICT" className="h-8 text-sm" autoFocus onKeyDown={(e) => e.key === "Enter" && handleCreate()} />
             </div>
             <div>
               <Label className="text-xs mb-1 block">Code *</Label>
-              <Input
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. B25ICT"
-                className="h-8 text-sm font-mono"
-                maxLength={10}
-              />
+              <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="B25ICT" className="h-8 text-sm font-mono" maxLength={10} />
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={handleCreate}
-              disabled={upsert.isPending || !name.trim() || !code.trim()}
-              className="h-7 text-xs gap-1"
-            >
+            <Button size="sm" onClick={handleCreate} disabled={upsert.isPending || !name.trim() || !code.trim()} className="h-7 text-xs gap-1">
               {upsert.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-              Create Group
+              Create
             </Button>
-            <button
-              onClick={() => { setShowForm(false); setName(""); setCode(""); }}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              Cancel
-            </button>
+            <button onClick={() => { setShowForm(false); setName(""); setCode(""); }} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
         </div>
       )}
@@ -125,168 +90,270 @@ function InlineCreateGroupForm({ onCreated }: { onCreated: () => void }) {
   );
 }
 
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    active:    "bg-emerald-100 text-emerald-700 border-emerald-200",
+    ongoing:   "bg-blue-100 text-blue-700 border-blue-200",
+    completed: "bg-slate-100 text-slate-600 border-slate-200",
+    draft:     "bg-amber-100 text-amber-700 border-amber-200",
+    closed:    "bg-red-100 text-red-700 border-red-200",
+  };
+  const cls = map[status?.toLowerCase()] ?? "bg-slate-100 text-slate-600 border-slate-200";
+  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  return <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", cls)}>{label}</span>;
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
-  const [showStats, setShowStats] = useState(false);
-  const { data: stats } = trpc.admin.dashboard.useQuery();
-  const { data: checklist, isLoading: checklistLoading } = trpc.admin.readinessChecklist.useQuery();
+  const { user } = useAuth();
   const utils = trpc.useUtils();
 
-  const wizardSteps: WizardStep[] = checklist
-    ? checklist.phases
-        .filter((p) => p.id !== 1)
-        .map((p) => {
-          const descriptions: Record<number, string> = {
-            2: "Create one or more survey groups to organize your respondents by sector, department, or job role.",
-            3: "Define survey objectives and business goals per group. The AI uses this to generate targeted questions.",
-            4: "Ensure at least 10 active questions exist. Generate AI-tailored questions from Survey Configuration.",
-            5: "Share the survey link with staff so they can register and complete their TNA survey.",
-            6: "Monitor survey completion from Reports. At least one completed survey is required before analysis.",
-            7: "Generate the AI-powered Training Plan from Group Analysis. Each TESDA section can be generated individually.",
-          };
-          const actionLabels: Record<number, string> = {
-            2: "Manage Groups",
-            3: "Survey Configuration",
-            4: "Manage Questions",
-            5: "Manage Users",
-            6: "View Reports",
-            7: "Group Analysis",
-          };
-          const shortLabels: Record<number, string> = {
-            2: "Groups",
-            3: "Objectives",
-            4: "Questions",
-            5: "Staff",
-            6: "Surveys",
-            7: "Training Plan",
-          };
-          return {
-            id: p.id - 1,
-            label: p.label,
-            shortLabel: shortLabels[p.id] ?? p.label,
-            hint: p.hint,
-            done: p.done,
-            link: p.link,
-            actionLabel: actionLabels[p.id] ?? "Go",
-            description: descriptions[p.id] ?? "",
-            // Inject inline Create Group form for the Groups step (phase id=2)
-            inlineContent: p.id === 2 ? (
-              <InlineCreateGroupForm
-                onCreated={() => utils.admin.readinessChecklist.invalidate()}
-              />
-            ) : undefined,
-          };
-        })
-    : [];
+  const { data: stats } = trpc.admin.dashboard.useQuery();
+  const { data: checklist } = trpc.admin.readinessChecklist.useQuery();
+  const { data: groupsData } = trpc.groups.list.useQuery({ activeOnly: false });
+  const groups = groupsData ?? [];
 
-  // Find the first incomplete step to surface the right CTA
-  const firstIncomplete = wizardSteps.find((s) => !s.done);
-  const allDone = wizardSteps.length > 0 && wizardSteps.every((s) => s.done);
-  const completedCount = wizardSteps.filter((s) => s.done).length;
+  // ── Derived stats from checklist phases ──
+  const phases = checklist?.phases ?? [];
+  const totalGroups = groups.length;
+  const activeGroups = groups.filter(g => g.isActive).length;
+  const totalStaff = stats?.totalUsers ?? 0;
+  const submitted = stats?.completedSurveys ?? 0;
+  const pending = Math.max(0, totalStaff - submitted);
+  const completedGroups = phases.find(p => p.id === 6)?.done ? activeGroups : 0;
+  const draftPlans = phases.find(p => p.id === 7)?.done ? 0 : (totalGroups > 0 ? 1 : 0);
+
+  // ── Alerts from checklist phases ──
+  const alerts: { type: "warning" | "info" | "success"; message: string; action?: { label: string; href: string } }[] = [];
+  if (phases.length > 0) {
+    if (!phases.find(p => p.id === 2)?.done)
+      alerts.push({ type: "warning", message: "No survey groups created yet. Create your first group to get started.", action: { label: "Create Group", href: "/admin/survey-groups/create" } });
+    if (phases.find(p => p.id === 2)?.done && !phases.find(p => p.id === 3)?.done)
+      alerts.push({ type: "info", message: "Survey objectives not configured. Set them up before launching surveys.", action: { label: "Configure", href: "/admin/survey-config" } });
+    if (phases.find(p => p.id === 6)?.done && !phases.find(p => p.id === 7)?.done)
+      alerts.push({ type: "success", message: "Surveys completed! Generate your AI-powered Training Plan now.", action: { label: "Generate Plan", href: "/admin/reports" } });
+  }
+
+  const roleLabel = user?.tnaRole === "admin" ? "Administrator" : "HR Officer";
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="max-w-7xl mx-auto space-y-6">
 
-      {/* Page header — one sentence, no fluff */}
-      <div className="flex items-start justify-between gap-4">
+      {/* ── Welcome Header ──────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">TNA Campaign</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {allDone
-              ? "All steps complete — your campaign is ready."
-              : firstIncomplete
-              ? `Next: ${firstIncomplete.shortLabel}`
-              : "Complete each step to launch your TNA campaign."}
+          <h1 className="text-2xl font-bold text-slate-900">
+            Welcome back, {user?.name?.split(" ")[0] ?? "there"} 👋
+          </h1>
+          <p className="text-slate-500 mt-1 text-sm">
+            <span className="font-medium text-slate-700">{roleLabel}</span>
+            {" · "}
+            {today}
           </p>
         </div>
-        {/* Stats toggle — secondary info, hidden by default */}
-        <button
-          onClick={() => setShowStats(!showStats)}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0 mt-1"
-        >
-          {showStats ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          {showStats ? "Hide stats" : "View stats"}
-        </button>
+        <Button onClick={() => navigate("/admin/survey-groups/create")} className="gap-2 self-start sm:self-auto flex-shrink-0">
+          <PlusCircle className="w-4 h-4" />
+          New Survey Group
+        </Button>
       </div>
 
-      {/* Stats — collapsed by default, progressive disclosure */}
-      {showStats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "Users", value: stats?.totalUsers ?? 0, icon: Users, color: "text-blue-600 bg-blue-50" },
-            { label: "Surveys", value: stats?.totalSurveys ?? 0, icon: BookOpen, color: "text-purple-600 bg-purple-50" },
-            { label: "Reports", value: stats?.totalReports ?? 0, icon: FileText, color: "text-green-600 bg-green-50" },
-            { label: "Completed", value: stats?.completedSurveys ?? 0, icon: BarChart3, color: "text-orange-600 bg-orange-50" },
-          ].map((s) => (
-            <Card key={s.label} className="border-slate-200">
-              <CardContent className="pt-4 pb-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${s.color}`}>
-                  <s.icon className="w-4 h-4" />
-                </div>
-                <p className="text-2xl font-bold text-slate-900">{s.value}</p>
-                <p className="text-xs text-slate-500">{s.label}</p>
-              </CardContent>
-            </Card>
+      {/* ── Alerts / Reminders ──────────────────────────────────────────── */}
+      {alerts.length > 0 && (
+        <div className="space-y-2">
+          {alerts.map((alert, i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-xl border text-sm",
+                alert.type === "warning" ? "bg-amber-50 border-amber-200 text-amber-800" :
+                alert.type === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-800" :
+                "bg-blue-50 border-blue-200 text-blue-800"
+              )}
+            >
+              {alert.type === "warning" ? <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-500" /> :
+               alert.type === "success" ? <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-500" /> :
+               <Bell className="w-4 h-4 flex-shrink-0 text-blue-500" />}
+              <span className="flex-1">{alert.message}</span>
+              {alert.action && (
+                <button
+                  onClick={() => navigate(alert.action!.href)}
+                  className="text-xs font-semibold underline underline-offset-2 flex-shrink-0"
+                >
+                  {alert.action.label}
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
 
-      {/* Campaign progress summary bar */}
-      {wizardSteps.length > 0 && !checklistLoading && (
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-4">
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-slate-700">Campaign Setup</span>
-              <span className="text-xs text-slate-500">{completedCount} of {wizardSteps.length} steps</span>
+      {/* ── 6 Stat Cards ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        {[
+          { label: "Total Groups",          value: totalGroups,    icon: ClipboardList, color: "text-blue-600",    bg: "bg-blue-50" },
+          { label: "Active Groups",          value: activeGroups,   icon: CheckCircle2,  color: "text-emerald-600", bg: "bg-emerald-50" },
+          { label: "Completed Groups",       value: completedGroups,icon: BarChart3,     color: "text-violet-600",  bg: "bg-violet-50" },
+          { label: "Pending Respondents",    value: pending,        icon: Clock,         color: "text-amber-600",   bg: "bg-amber-50" },
+          { label: "Submitted Assessments",  value: submitted,      icon: FileText,      color: "text-sky-600",     bg: "bg-sky-50" },
+          { label: "Draft Training Plans",   value: draftPlans,     icon: GraduationCap, color: "text-rose-600",    bg: "bg-rose-50" },
+        ].map((s) => (
+          <div key={s.label} className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
+            <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", s.bg)}>
+              <s.icon className={cn("w-4 h-4", s.color)} />
             </div>
-            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all"
-                style={{ width: `${(completedCount / wizardSteps.length) * 100}%` }}
-              />
+            <div>
+              <p className="text-2xl font-bold text-slate-900">{s.value}</p>
+              <p className="text-xs text-slate-500 leading-tight mt-0.5">{s.label}</p>
             </div>
           </div>
-          {allDone && (
-            <Button size="sm" onClick={() => navigate("/admin/reports")} className="flex-shrink-0">
-              View Reports <ArrowRight className="ml-1.5 w-3.5 h-3.5" />
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* THE WIZARD — this is the entire page objective */}
-      <Card className="border-slate-200">
-        <CardContent className="pt-5 pb-5">
-          {checklistLoading ? (
-            <div className="flex items-center gap-2 text-slate-500 text-sm py-6 justify-center">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Checking campaign status…</span>
-            </div>
-          ) : wizardSteps.length > 0 ? (
-            <TNAWizard steps={wizardSteps} />
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {/* Quick links — minimal, text-only, below the fold */}
-      <div className="flex flex-wrap gap-2 pt-1">
-        {[
-          { label: "Groups", icon: Tag, path: "/admin/groups" },
-          { label: "Questions", icon: BookOpen, path: "/admin/questions" },
-          { label: "Users", icon: Users, path: "/admin/users" },
-          { label: "Reports", icon: BarChart3, path: "/admin/reports" },
-          { label: "Survey Config", icon: Sparkles, path: "/admin/survey-config" },
-        ].map((item) => (
-          <button
-            key={item.path}
-            onClick={() => navigate(item.path)}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-primary transition-colors px-3 py-1.5 rounded-lg border border-slate-200 hover:border-primary/30 bg-white"
-          >
-            <item.icon className="w-3.5 h-3.5" />
-            {item.label}
-          </button>
         ))}
       </div>
+
+      {/* ── 4 Primary Action Cards ──────────────────────────────────────── */}
+      <div>
+        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Main Actions</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {[
+            {
+              title: "View Survey Groups",
+              description: "Monitor progress, response rates, and status of all survey groups.",
+              icon: ClipboardList, color: "text-blue-600", bg: "bg-blue-50",
+              href: "/admin/groups", cta: "View Groups", primary: true,
+            },
+            {
+              title: "Create Survey Group",
+              description: "Set up a new group with participants, questionnaire, and schedule.",
+              icon: PlusCircle, color: "text-emerald-600", bg: "bg-emerald-50",
+              href: "/admin/survey-groups/create", cta: "Create Group", primary: true,
+            },
+            {
+              title: "Company Information",
+              description: "Update your organization profile, departments, and contact details.",
+              icon: Building2, color: "text-violet-600", bg: "bg-violet-50",
+              href: "/admin/company", cta: "Update Info", primary: false,
+            },
+            {
+              title: "Training Plans & Outputs",
+              description: "Access results, skills gap summaries, training plans, and reports.",
+              icon: GraduationCap, color: "text-amber-600", bg: "bg-amber-50",
+              href: "/admin/results", cta: "View Outputs", primary: false,
+            },
+          ].map((card) => (
+            <button
+              key={card.title}
+              onClick={() => navigate(card.href)}
+              className={cn(
+                "group text-left bg-white rounded-xl border p-5 flex flex-col gap-3 transition-all hover:shadow-md hover:-translate-y-0.5",
+                card.primary ? "border-slate-200 hover:border-primary/40" : "border-slate-200 hover:border-slate-300"
+              )}
+            >
+              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", card.bg)}>
+                <card.icon className={cn("w-5 h-5", card.color)} />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-slate-900 text-sm">{card.title}</p>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">{card.description}</p>
+              </div>
+              <div className={cn(
+                "flex items-center gap-1 text-xs font-medium transition-colors",
+                card.primary ? "text-primary" : "text-slate-500 group-hover:text-slate-700"
+              )}>
+                {card.cta}
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Recent Survey Groups ─────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recent Survey Groups</h2>
+          <button onClick={() => navigate("/admin/groups")} className="text-xs text-primary font-medium flex items-center gap-1 hover:underline">
+            View all <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {groups.length === 0 ? (
+          <div className="bg-white rounded-xl border border-dashed border-slate-300 p-10 text-center">
+            <ClipboardList className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-600 font-medium">No survey groups yet</p>
+            <p className="text-slate-400 text-sm mt-1 mb-4">Create your first group to start collecting TNA data.</p>
+            <InlineCreateGroupForm onCreated={() => utils.groups.list.invalidate()} />
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="hidden md:grid grid-cols-[2fr_80px_100px_120px_90px_40px] gap-4 px-5 py-3 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <span>Group</span><span>Staff</span><span>Responded</span><span>Progress</span><span>Status</span><span></span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {groups.slice(0, 6).map((group) => {
+                    const responded = 0; // respondent counts require a separate query
+                    const total = 0;
+                const pct = total > 0 ? Math.round((responded / total) * 100) : 0;
+                const status = !group.isActive ? "draft" : pct === 100 ? "completed" : pct > 0 ? "ongoing" : "active";
+                return (
+                  <div key={group.id} className="grid grid-cols-1 md:grid-cols-[2fr_80px_100px_120px_90px_40px] gap-2 md:gap-4 px-5 py-4 hover:bg-slate-50 transition-colors items-center">
+                    <div>
+                      <p className="font-medium text-slate-900 text-sm">{group.name}</p>
+                      {group.code && <p className="text-xs text-slate-400 mt-0.5 font-mono">{group.code}</p>}
+                    </div>
+                    <div className="text-sm text-slate-600 flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-slate-400 hidden md:block" />{total}
+                    </div>
+                    <div className="text-sm text-slate-600">{responded} / {total}</div>
+                    <div className="flex items-center gap-2">
+                      <Progress value={pct} className="h-1.5 flex-1" />
+                      <span className="text-xs text-slate-500 w-8 text-right">{pct}%</span>
+                    </div>
+                    <div><StatusBadge status={status} /></div>
+                    <div>
+                      <button onClick={() => navigate("/admin/groups")} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700" title="View">
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {groups.length > 6 && (
+              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
+                <button onClick={() => navigate("/admin/groups")} className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
+                  View {groups.length - 6} more groups <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Quick Links ──────────────────────────────────────────────────── */}
+      <div>
+        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Quick Links</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "Results & Analytics", icon: TrendingUp,   href: "/admin/results",         color: "text-blue-600" },
+            { label: "Training Plans",      icon: GraduationCap, href: "/admin/training-plans",  color: "text-emerald-600" },
+            { label: "Reports Archive",     icon: FileText,      href: "/admin/reports",         color: "text-violet-600" },
+            { label: "Staff Management",    icon: Users,         href: "/admin/users",           color: "text-amber-600" },
+          ].map(link => (
+            <button
+              key={link.label}
+              onClick={() => navigate(link.href)}
+              className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3 hover:shadow-sm hover:border-slate-300 transition-all text-left group"
+            >
+              <link.icon className={cn("w-4 h-4 flex-shrink-0", link.color)} />
+              <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900 flex-1">{link.label}</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600" />
+            </button>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }

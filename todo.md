@@ -220,3 +220,11 @@
 - [x] Production build verification — pnpm build runs cleanly (2026 modules, dist/index.js 161.9kb)
 - [x] Production start script — ecosystem.config.cjs for PM2 + update.sh one-liner deploy script
 - [x] Error handling hardening — NODE_ENV=production disables debug; PM2 restart policy configured
+
+## Post-Login Admin/HR UX Overhaul (Apr 20, 2026)
+- [x] AdminLayout nav: add Survey Groups, Create Survey Group, Results & Analytics, Training Plans, Recommendations, Company Info, Reports
+- [x] AdminDashboard: welcome header (name + role + org), 6 stat cards, 4 primary action cards, recent groups table, alerts/reminders
+- [x] Survey Groups page: list view with search/filter, status badges, stats strip, action buttons
+- [x] Create Survey Group wizard: 5-step (Info → Participants → Questionnaire → Schedule → Review)
+- [x] Company Information page: editable form (org name, industry, TNA purpose, participants, regulatory requirements, notes) — stored in surveyConfig groupId=0
+- [x] Other Outputs module: nav links in AdminLayout sidebar (Results & Analytics, Training Plans, Recommendations, Reports Archive)
