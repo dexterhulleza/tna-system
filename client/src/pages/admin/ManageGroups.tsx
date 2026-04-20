@@ -331,7 +331,7 @@ export default function ManageGroups() {
                         </div>
                       </div>
                       <div className="flex gap-1">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(group as Group)}>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Edit group" onClick={() => navigate(`/admin/survey-groups/${group.id}/edit`)}>
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
                         <Button
@@ -424,7 +424,7 @@ export default function ManageGroups() {
                     <span className="text-sm text-muted-foreground">{group.name}</span>
                     <Badge variant="outline" className="text-xs">{group.code}</Badge>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => openEdit(group as Group)}>
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/admin/survey-groups/${group.id}/edit`)}>
                     Restore
                   </Button>
                 </CardContent>

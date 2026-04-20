@@ -18,6 +18,8 @@ import AdminReports from "./pages/admin/AdminReports";
 import AdminAISettings from "./pages/admin/AdminAISettings";
 import ManageGroups from "./pages/admin/ManageGroups";
 import CreateSurveyGroup from "./pages/admin/CreateSurveyGroup";
+import EditSurveyGroup from "./pages/admin/EditSurveyGroup";
+import AdminTrainingPlans from "./pages/admin/AdminTrainingPlans";
 import CompanyInfo from "@/pages/admin/CompanyInfo";
 import AdminResults from "@/pages/admin/AdminResults";
 import SurveyConfiguration from "./pages/admin/SurveyConfiguration";
@@ -57,6 +59,8 @@ function Router() {
       <Route path="/admin/reports" component={withAdminLayout(AdminReports)} />
       <Route path="/admin/groups" component={withAdminLayout(ManageGroups)} />
       <Route path="/admin/survey-groups/create" component={withAdminLayout(CreateSurveyGroup)} />
+      <Route path="/admin/survey-groups/:id/edit" component={withAdminLayout(EditSurveyGroup)} />
+      <Route path="/admin/training-plans" component={withAdminLayout(AdminTrainingPlans)} />
       <Route path="/admin/survey-config" component={withAdminLayout(SurveyConfiguration)} />
       <Route path="/admin/ai-settings" component={withAdminLayout(AdminAISettings)} />
         <Route path="/admin/company-info" component={withAdminLayout(CompanyInfo)} />

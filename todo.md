@@ -255,3 +255,7 @@
 ## Create Survey Group Wizard Improvements (Apr 20, 2026)
 - [ ] Step 2 Participants: 3-method enrollment tabs (QR/open enrollment with expected count, manual search from registered users, CSV upload with downloadable template)
 - [ ] Step 3 Questionnaire: quick-setup tabs (reuse previously used set, type new questions inline, upload questions CSV)
+
+## Group Edit + Training Plans (Apr 20 2026)
+- [x] Group Edit page: pre-filled 5-step wizard at /admin/survey-groups/:id/edit, Edit button on ManageGroups cards
+- [x] Training Plans page: /admin/training-plans listing all groups with plan status, Generate Plan button, Download Markdown button
