@@ -251,3 +251,7 @@
 ### Results & Analytics page (admin)
 - [ ] /admin/results page: response rate chart per group, category score breakdown bars, top skill gaps across all groups
 - [ ] Tabbed layout: Overview, By Group, By Category, Skill Gaps
+
+## Create Survey Group Wizard Improvements (Apr 20, 2026)
+- [ ] Step 2 Participants: 3-method enrollment tabs (QR/open enrollment with expected count, manual search from registered users, CSV upload with downloadable template)
+- [ ] Step 3 Questionnaire: quick-setup tabs (reuse previously used set, type new questions inline, upload questions CSV)
