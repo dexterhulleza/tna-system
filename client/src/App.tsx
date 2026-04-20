@@ -59,8 +59,8 @@ function Router() {
       <Route path="/admin/survey-groups/create" component={withAdminLayout(CreateSurveyGroup)} />
       <Route path="/admin/survey-config" component={withAdminLayout(SurveyConfiguration)} />
       <Route path="/admin/ai-settings" component={withAdminLayout(AdminAISettings)} />
-        <Route path="/admin/company-info" component={CompanyInfo} />
-        <Route path="/admin/results" component={AdminResults} />
+        <Route path="/admin/company-info" component={withAdminLayout(CompanyInfo)} />
+        <Route path="/admin/results" component={withAdminLayout(AdminResults)} />
 
       {/* Fallback */}
       <Route path="/404" component={NotFound} />

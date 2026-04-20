@@ -7,20 +7,21 @@ import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
 import { ArrowRight, BookOpen, CheckCircle2, Loader2 } from "lucide-react";
-
+import { useEffect } from "react";
 export default function Home() {
   const { user, loading, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
-
   // If already logged in, route to the right dashboard immediately
-  if (!loading && isAuthenticated && user) {
-    if (user.role === "admin") {
-      navigate("/admin");
-      return null;
+  // MUST be in useEffect — never call navigate() in render body
+  useEffect(() => {
+    if (!loading && isAuthenticated && user) {
+      if (user.role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
     }
-    navigate("/dashboard");
-    return null;
-  }
+  }, [loading, isAuthenticated, user, navigate]);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">

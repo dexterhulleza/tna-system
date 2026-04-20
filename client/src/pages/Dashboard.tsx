@@ -13,7 +13,7 @@ import {
   Loader2, AlertTriangle, ArrowRight, ChevronDown, ChevronUp,
   AlertCircle, Clock, Mail, Users
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const GAP_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   critical: { label: "Critical Gap", bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500" },
@@ -48,10 +48,13 @@ export default function Dashboard() {
     );
   }
 
-  if (!user) {
-    navigate("/");
-    return null;
-  }
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/");
+    }
+  }, [loading, user, navigate]);
+
+  if (!user) return null;
 
   const recentReports = reports || [];
   const latestReport = recentReports[0];
