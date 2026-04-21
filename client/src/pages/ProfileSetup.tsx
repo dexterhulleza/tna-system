@@ -303,39 +303,7 @@ export default function ProfileSetup() {
           </div>
         )}
 
-        {/* ── TNA Role ── */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h2 className="font-semibold text-slate-900 flex items-center gap-2">
-              <UserCog className="w-4 h-4 text-primary" />
-              TNA Role
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Select the role that best describes your participation.</p>
-          </div>
-          <div className="px-5 py-5 grid grid-cols-2 gap-2">
-            {ROLES.map(({ value, label, icon: Icon }) => {
-              const selected = selectedRole === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setSelectedRole(value)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${
-                    selected
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-slate-200 text-slate-700 hover:border-primary/40 hover:bg-primary/5"
-                  }`}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm font-medium">{label}</span>
-                  {selected && <CheckCircle2 className="w-4 h-4 ml-auto flex-shrink-0" />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Save Profile Button */}
+         {/* Save Profile Button */}
         <Button
           onClick={handleSaveProfile}
           disabled={updateProfile.isPending}
