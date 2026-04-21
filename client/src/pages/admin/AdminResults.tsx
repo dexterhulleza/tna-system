@@ -4,7 +4,6 @@
  */
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import AdminLayout from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -111,8 +110,7 @@ export default function AdminResults() {
   const isLoading = groupsLoading || reportsLoading;
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <div className="space-y-6">
 
         {/* Page header */}
         <div className="flex items-center justify-between">
@@ -490,7 +488,6 @@ export default function AdminResults() {
             )}
           </>
         )}
-      </div>
-    </AdminLayout>
+    </div>
   );
 }
