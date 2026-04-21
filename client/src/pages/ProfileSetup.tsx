@@ -1,5 +1,5 @@
 /**
- * Staff Profile Page — Update your personal details, role, and password.
+ * Staff Profile Page — Update your personal details, role, work function, and password.
  * ONE OBJECTIVE: keep your profile accurate so your TNA results are meaningful.
  */
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -11,17 +11,24 @@ import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import StaffLayout from "@/components/StaffLayout";
+import PsocWorkFunctionPicker, { type WorkFunctionValue } from "@/components/PsocWorkFunctionPicker";
+import { findPsocFunction, findPsocGroup } from "@/lib/psocData";
 import {
   Briefcase, GraduationCap, ClipboardCheck, UserCog,
   User, Mail, Phone, Building, Lock, Eye, EyeOff, CheckCircle2, Loader2,
+  MapPin, AlertCircle,
 } from "lucide-react";
 
 const ROLES = [
-  { value: "industry_worker", label: "Industry Worker", icon: Briefcase },
-  { value: "trainer",         label: "Trainer",         icon: GraduationCap },
-  { value: "assessor",        label: "Assessor",        icon: ClipboardCheck },
-  { value: "hr_officer",      label: "HR Officer",      icon: UserCog },
+  { value: "industry_worker", label: "Industry Worker / Employee", icon: Briefcase },
+  { value: "employee",        label: "Employee Respondent",        icon: User },
+  { value: "trainer",         label: "Trainer",                   icon: GraduationCap },
+  { value: "assessor",        label: "Assessor",                  icon: ClipboardCheck },
+  { value: "hr_officer",      label: "HR Officer",                icon: UserCog },
 ] as const;
+
+/** Roles that require the PSOC work function field */
+const EMPLOYEE_ROLES = new Set(["industry_worker", "employee"]);
 
 export default function ProfileSetup() {
   const { user, loading } = useAuth();
@@ -33,6 +40,11 @@ export default function ProfileSetup() {
   const [phone, setPhone]             = useState("");
   const [department, setDepartment]   = useState("");
   const [selectedRole, setSelectedRole] = useState("industry_worker");
+
+  // PSOC work function
+  const [workFunction, setWorkFunction] = useState<WorkFunctionValue | null>(null);
+  const [workFunctionError, setWorkFunctionError] = useState("");
+
   const [profileSaved, setProfileSaved] = useState(false);
 
   const [currentPw, setCurrentPw]     = useState("");
@@ -51,8 +63,34 @@ export default function ProfileSetup() {
       setPhone((user as any).phone || "");
       setDepartment((user as any).department || "");
       setSelectedRole(user.tnaRole && user.tnaRole !== "admin" ? user.tnaRole : "industry_worker");
+
+      // Restore saved work function
+      const u = user as any;
+      if (u.workFunctionTitle) {
+        const fn = findPsocFunction(u.workFunctionTitle);
+        const grp = findPsocGroup(u.workFunctionCategory || "");
+        if (fn && grp) {
+          setWorkFunction({
+            category: u.workFunctionCategory,
+            title: u.workFunctionTitle,
+            psocCode: u.workFunctionPsocCode || fn.code,
+            otherText: u.workFunctionOtherText || "",
+            displayLabel: fn.title,
+          });
+        } else if (u.workFunctionCategory === "OTHERS") {
+          setWorkFunction({
+            category: "OTHERS",
+            title: "OTHERS_SPECIFY",
+            psocCode: "10.01",
+            otherText: u.workFunctionOtherText || "",
+            displayLabel: "Others (specify)",
+          });
+        }
+      }
     }
   }, [user]);
+
+  const isEmployeeRole = EMPLOYEE_ROLES.has(selectedRole);
 
   const updateProfile = trpc.auth.updateProfile.useMutation({
     onSuccess: () => {
@@ -63,12 +101,45 @@ export default function ProfileSetup() {
     onError: (err) => toast.error(err.message || "Failed to save profile"),
   });
 
+  const changePassword = trpc.customAuth.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success("Password changed successfully!");
+      setPwSaved(true);
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+      setTimeout(() => setPwSaved(false), 3000);
+    },
+    onError: (err) => toast.error(err.message || "Failed to change password"),
+  });
+
   const handleSaveProfile = () => {
     if (!name.trim()) { toast.error("Name is required"); return; }
+
+    // Validate work function for employee roles
+    if (isEmployeeRole) {
+      if (!workFunction) {
+        setWorkFunctionError("Primary Work Function is required for Employee Respondent.");
+        toast.error("Please select your Primary Work Function.");
+        return;
+      }
+      if (workFunction.title === "OTHERS_SPECIFY" && !workFunction.otherText?.trim()) {
+        setWorkFunctionError("Please describe your work function.");
+        toast.error("Please describe your work function.");
+        return;
+      }
+    }
+    setWorkFunctionError("");
+
     updateProfile.mutate({
       tnaRole: selectedRole as any,
       organization,
       jobTitle,
+      department,
+      workFunctionCategory: isEmployeeRole && workFunction ? workFunction.category : null,
+      workFunctionTitle:    isEmployeeRole && workFunction ? workFunction.title    : null,
+      workFunctionPsocCode: isEmployeeRole && workFunction ? workFunction.psocCode : null,
+      workFunctionOtherText: isEmployeeRole && workFunction?.title === "OTHERS_SPECIFY"
+        ? workFunction.otherText ?? null
+        : null,
     });
   };
 
@@ -180,32 +251,83 @@ export default function ProfileSetup() {
           </div>
         </div>
 
-        {/* ── Role ── */}
+        {/* ── Work Information (PSOC) — only for employee roles ── */}
+        {isEmployeeRole && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" />
+                Work Information
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Required for Employee Respondents to enable accurate competency mapping.
+              </p>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-slate-700">
+                  Primary Work Function
+                  <span className="text-red-500 ml-1">*</span>
+                </Label>
+                <div className="mt-1">
+                  <PsocWorkFunctionPicker
+                    value={workFunction}
+                    onChange={(val) => {
+                      setWorkFunction(val);
+                      if (val) setWorkFunctionError("");
+                    }}
+                    required
+                    error={workFunctionError}
+                  />
+                </div>
+              </div>
+              {workFunction && workFunction.title !== "OTHERS_SPECIFY" && (
+                <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-3 flex items-start gap-3">
+                  <Briefcase className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-primary">{workFunction.displayLabel}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      PSOC {workFunction.psocCode} · {workFunction.category.replace(/_/g, " ")}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 flex items-start gap-3">
+                <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-700">
+                  Your work function is used for competency gap detection, AI training recommendations,
+                  and mapping to TESDA Training Regulations and Competency Standards.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TNA Role ── */}
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100">
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-primary" />
-              My Role
+              <UserCog className="w-4 h-4 text-primary" />
+              TNA Role
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Select the role that best describes your position.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Select the role that best describes your participation.</p>
           </div>
-          <div className="px-5 py-4 grid grid-cols-2 gap-2">
-            {ROLES.map((role) => {
-              const Icon = role.icon;
-              const selected = selectedRole === role.value;
+          <div className="px-5 py-5 grid grid-cols-2 gap-2">
+            {ROLES.map(({ value, label, icon: Icon }) => {
+              const selected = selectedRole === value;
               return (
                 <button
-                  key={role.value}
+                  key={value}
                   type="button"
-                  onClick={() => setSelectedRole(role.value)}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-xl border-2 text-left transition-all ${
+                  onClick={() => setSelectedRole(value)}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${
                     selected
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-slate-200 text-slate-700 hover:border-primary/40 hover:bg-primary/5"
                   }`}
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm font-medium">{role.label}</span>
+                  <span className="text-sm font-medium">{label}</span>
                   {selected && <CheckCircle2 className="w-4 h-4 ml-auto flex-shrink-0" />}
                 </button>
               );
@@ -298,15 +420,18 @@ export default function ProfileSetup() {
             <Button
               variant="outline"
               className="w-full"
-              disabled={!currentPw || !newPw || newPw !== confirmPw}
+              disabled={changePassword.isPending || !currentPw || !newPw || newPw !== confirmPw || newPw.length < 8}
               onClick={() => {
-                // Password change via Manus OAuth is not directly supported;
-                // show a helpful message
-                toast.info("Password changes are managed through your Manus account settings.");
-                setCurrentPw(""); setNewPw(""); setConfirmPw("");
+                changePassword.mutate({ currentPassword: currentPw, newPassword: newPw });
               }}
             >
-              {pwSaved ? <><CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />Password Updated</> : "Change Password"}
+              {changePassword.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Changing…</>
+              ) : pwSaved ? (
+                <><CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />Password Updated</>
+              ) : (
+                "Change Password"
+              )}
             </Button>
           </div>
         </div>

@@ -297,3 +297,13 @@
   - Save button disabled when HR Officer is editing a System Admin user
   - Role filter dropdown hides System Administrator option for HR Officers
   - Add User dialog also uses checkbox-based role picker with same governance rules
+
+## PSOC Primary Work Function (Apr 22, 2026)
+- [x] DB: extended users table with workFunctionCategory, workFunctionTitle, workFunctionPsocCode, workFunctionOtherText columns (migration 0008)
+- [x] Backend: auth.updateProfile procedure updated to accept and persist all 4 work function fields
+- [x] Backend: customAuth.changePassword procedure added — verifies current password, updates hash, writes audit log
+- [x] Frontend: client/src/lib/psocData.ts — 10 PSOC occupational groups with 80+ job functions and PSOC codes
+- [x] Frontend: client/src/components/PsocWorkFunctionPicker.tsx — searchable grouped dropdown with Others free-text
+- [x] Frontend: ProfileSetup.tsx — Work Information section shown for industry_worker/employee roles with PsocWorkFunctionPicker
+- [x] Frontend: ProfileSetup.tsx — Password Change section now calls customAuth.changePassword (real password change)
+- [x] 27 tests passing, 0 TypeScript errors

@@ -36,6 +36,11 @@ export const users = mysqlTable("users", {
   resetTokenExpiry: timestamp("resetTokenExpiry"),
   // HR Officer registration fields
   hrJustification: text("hrJustification"),
+  // PSOC-aligned Primary Work Function (required for Employee Respondent)
+  workFunctionCategory: varchar("workFunctionCategory", { length: 100 }),
+  workFunctionTitle: varchar("workFunctionTitle", { length: 255 }),
+  workFunctionPsocCode: varchar("workFunctionPsocCode", { length: 20 }),
+  workFunctionOtherText: varchar("workFunctionOtherText", { length: 150 }),
   // Group assignment (for staff)
   groupId: int("groupId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

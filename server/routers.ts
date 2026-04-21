@@ -488,8 +488,32 @@ export const appRouter = router({
         await db.update(users).set(updateData).where(eq(users.id, ctx.user.id));
         return { success: true };
       }),
-  }),
 
+    // Change own password (requires current password verification)
+    changePassword: protectedProcedure
+      .input(
+        z.object({
+          currentPassword: z.string().min(1),
+          newPassword: z.string().min(8),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [user] = await db.select().from(users).where(eq(users.id, ctx.user.id)).limit(1);
+        if (!user || !user.passwordHash) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No password set for this account" });
+        }
+        const valid = await verifyPassword(input.currentPassword, user.passwordHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Current password is incorrect" });
+        }
+        const newHash = await hashPassword(input.newPassword);
+        await updatePassword(ctx.user.id, newHash);
+        await createAuditLog({ userId: ctx.user.id, action: "password_changed", module: "auth", details: "User changed own password" });
+        return { success: true };
+      }),
+  }),
   system: systemRouter,
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
@@ -510,10 +534,28 @@ export const appRouter = router({
           tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin", "ld_officer", "line_manager", "employee", "executive_reviewer"]).optional(),
           organization: z.string().optional(),
           jobTitle: z.string().optional(),
+          department: z.string().optional(),
+          // PSOC work function fields
+          workFunctionCategory: z.string().max(100).optional().nullable(),
+          workFunctionTitle: z.string().max(255).optional().nullable(),
+          workFunctionPsocCode: z.string().max(20).optional().nullable(),
+          workFunctionOtherText: z.string().max(150).optional().nullable(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        await updateUserProfile(ctx.user.id, input);
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Validate: if user is employee role, work function is required
+        const updateData: Record<string, unknown> = {};
+        if (input.tnaRole !== undefined) updateData.tnaRole = input.tnaRole;
+        if (input.organization !== undefined) updateData.organization = input.organization;
+        if (input.jobTitle !== undefined) updateData.jobTitle = input.jobTitle;
+        if (input.department !== undefined) updateData.department = input.department;
+        if (input.workFunctionCategory !== undefined) updateData.workFunctionCategory = input.workFunctionCategory;
+        if (input.workFunctionTitle !== undefined) updateData.workFunctionTitle = input.workFunctionTitle;
+        if (input.workFunctionPsocCode !== undefined) updateData.workFunctionPsocCode = input.workFunctionPsocCode;
+        if (input.workFunctionOtherText !== undefined) updateData.workFunctionOtherText = input.workFunctionOtherText;
+        await db.update(users).set(updateData).where(eq(users.id, ctx.user.id));
         return { success: true };
       }),
   }),
