@@ -37,7 +37,7 @@ export default function Home() {
           variant="ghost"
           size="sm"
           className="text-slate-400 hover:text-white"
-          onClick={() => { window.location.href = getLoginUrl("/dashboard"); }}
+          onClick={() => { navigate("/login?returnPath=%2Fdashboard"); }}
         >
           Sign in
         </Button>
@@ -73,7 +73,7 @@ export default function Home() {
               <Button
                 size="lg"
                 className="w-full sm:w-auto px-10 py-6 text-base font-semibold bg-blue-500 hover:bg-blue-400 text-white rounded-xl shadow-lg shadow-blue-500/25"
-                onClick={() => { window.location.href = getLoginUrl("/dashboard"); }}
+                onClick={() => { navigate("/login?returnPath=%2Fdashboard"); }}
               >
                 Start Assessment
                 <ArrowRight className="ml-2 w-5 h-5" />
@@ -117,7 +117,7 @@ export default function Home() {
         </div>
         <button
           className="text-xs text-slate-600 hover:text-slate-400 transition-colors"
-          onClick={() => { window.location.href = getLoginUrl("/admin"); }}
+          onClick={() => { navigate("/login?returnPath=%2Fadmin"); }}
         >
           HR Officer / Admin login →
         </button>

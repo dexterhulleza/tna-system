@@ -43,6 +43,13 @@
       "when": 1776669013002,
       "tag": "0005_fuzzy_zzzax",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1776789226284,
+      "tag": "0006_shiny_cerebro",
+      "breakpoints": true
     }
   ]
 }

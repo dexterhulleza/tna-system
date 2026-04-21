@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -34,6 +34,7 @@ import {
   HelpCircle,
   Globe,
   Layers,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -88,6 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: BookOpen, label: "Questions", path: "/admin/questions" },
       { icon: Globe, label: "Sectors", path: "/admin/sectors" },
       { icon: Bot, label: "AI Provider", path: "/admin/ai-settings", adminOnly: true },
+      { icon: ShieldAlert, label: "Audit Logs", path: "/admin/audit-logs", adminOnly: true },
     ],
   },
 ];
@@ -98,9 +100,50 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      navigate("/login?returnPath=" + encodeURIComponent(location));
+    }
+  }, [loading, user, location, navigate]);
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-slate-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied if user doesn't have admin/hr_officer role
+  if (user && user.role !== "admin" && user.tnaRole !== "hr_officer" && user.tnaRole !== "admin") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+            <ShieldAlert className="w-8 h-8 text-red-500" />
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 mb-2">Access Denied</h1>
+          <p className="text-slate-500 text-sm mb-4">You don't have permission to access this area.</p>
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Auto-open settings if current path is under settings
   const isInSettings = ["/admin/questions", "/admin/sectors", "/admin/ai-settings"].some(p =>

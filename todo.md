@@ -259,3 +259,27 @@
 ## Group Edit + Training Plans (Apr 20 2026)
 - [x] Group Edit page: pre-filled 5-step wizard at /admin/survey-groups/:id/edit, Edit button on ManageGroups cards
 - [x] Training Plans page: /admin/training-plans listing all groups with plan status, Generate Plan button, Download Markdown button
+
+## Custom Auth System (Apr 22, 2026)
+- [x] DB: extend users table with passwordHash, emailVerified, isActive, department, employeeId, mobile, pendingApproval, resetToken, resetTokenExpiry, lastLoginAt fields
+- [x] DB: add auditLogs table (userId, userEmail, userName, action, module, details, ipAddress, createdAt)
+- [x] DB: run migration (0006_shiny_cer.sql) to apply schema changes
+- [x] Backend: server/customAuth.ts — hashPassword, verifyPassword, createSession, generateOpenId, writeAuditLog helpers
+- [x] Backend: customAuth.register procedure — email/password registration, bcrypt hash, duplicate check, audit log
+- [x] Backend: customAuth.login procedure — email/password login, bcrypt verify, JWT session cookie, audit log
+- [x] Backend: customAuth.forgotPassword procedure — generate reset token, return token (email delivery TBD)
+- [x] Backend: customAuth.resetPassword procedure — verify token, update password, clear token
+- [x] Backend: customAuth.getAuditLogs procedure — paginated, filterable by action + search
+- [x] Backend: customAuth.completeProfile procedure — update tnaRole, department, organization, jobTitle, groupId
+- [x] Frontend: client/src/const.ts — getLoginUrl() now returns /login (custom auth) instead of Manus OAuth
+- [x] Frontend: client/src/_core/hooks/useAuth.ts — skip redirect when already on auth pages (/login, /register, etc.)
+- [x] Frontend: pages/auth/Login.tsx — email/password login form with show/hide password, returnPath redirect
+- [x] Frontend: pages/auth/Register.tsx — full registration form (name, email, password, role, org, department)
+- [x] Frontend: pages/auth/ForgotPassword.tsx — email input, shows reset token on success (email delivery TBD)
+- [x] Frontend: pages/auth/ResetPassword.tsx — token + new password form
+- [x] Frontend: pages/admin/AdminAuditLogs.tsx — paginated audit log table with action filter + search
+- [x] Frontend: AdminLayout.tsx — auth guard (redirect to /login if not authenticated, Access Denied if wrong role)
+- [x] Frontend: AdminLayout sidebar — Audit Logs link under Settings (admin only)
+- [x] App.tsx — registered /login, /register, /forgot-password, /reset-password, /admin/audit-logs routes
+- [x] All getLoginUrl() usages updated to point to /login instead of Manus OAuth portal
+- [x] 27 tests passing, 0 TypeScript errors

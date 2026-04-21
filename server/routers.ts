@@ -58,6 +58,24 @@ import {
   deleteGroupAnalysisSection,
 } from "./db";
 import { analyzeGaps, generateRecommendations } from "./tnaEngine";
+import {
+  hashPassword,
+  verifyPassword,
+  createSessionToken,
+  setSessionCookie,
+  generateResetToken,
+  getResetTokenExpiry,
+  getUserByEmail,
+  getUserByResetToken,
+  setResetToken,
+  clearResetToken,
+  updatePassword,
+  createAuditLog,
+  generateOpenId,
+} from "./customAuth";
+import { upsertUser, getDb } from "./db";
+import { users, auditLogs } from "../drizzle/schema";
+import { and, desc, eq, like, or, sql } from "drizzle-orm";
 
 // ─── Helper: check admin ───────────────────────────────────────────────────────
 const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
@@ -73,6 +91,396 @@ const superAdminProcedure = adminProcedure.use(async ({ ctx, next }) => {
 });
 
 export const appRouter = router({
+  // ─── Custom Auth ──────────────────────────────────────────────────────────
+  customAuth: router({
+    register: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(2),
+          email: z.string().email(),
+          mobile: z.string().optional(),
+          password: z.string().min(8),
+          // 'staff' | 'hr_officer'
+          tnaRole: z.enum(["industry_worker", "hr_officer"]),
+          // Staff-specific
+          department: z.string().optional(),
+          employeeId: z.string().optional(),
+          groupId: z.number().optional(),
+          // HR-specific
+          organization: z.string().optional(),
+          jobTitle: z.string().optional(),
+          hrJustification: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        // Check if email already exists
+        const existing = await getUserByEmail(input.email);
+        if (existing) throw new TRPCError({ code: "CONFLICT", message: "Email already registered" });
+
+        const passwordHash = await hashPassword(input.password);
+        const openId = generateOpenId();
+        const isHR = input.tnaRole === "hr_officer";
+
+        await upsertUser({
+          openId,
+          name: input.name,
+          email: input.email,
+          mobile: input.mobile ?? null,
+          loginMethod: "password",
+          role: "user",
+          tnaRole: input.tnaRole,
+          organization: input.organization ?? null,
+          jobTitle: input.jobTitle ?? null,
+          department: input.department ?? null,
+          employeeId: input.employeeId ?? null,
+          groupId: input.groupId ?? null,
+          passwordHash,
+          emailVerified: false,
+          isActive: !isHR, // HR accounts start inactive until approved
+          pendingApproval: isHR,
+          hrJustification: input.hrJustification ?? null,
+          lastSignedIn: new Date(),
+        });
+
+        const newUser = await getUserByEmail(input.email);
+        if (!newUser) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Registration failed" });
+
+        await createAuditLog({
+          userId: newUser.id,
+          userEmail: newUser.email,
+          userName: newUser.name ?? undefined,
+          action: "REGISTER",
+          module: "Auth",
+          details: `Self-registered as ${input.tnaRole}${isHR ? " (pending approval)" : ""}`,
+          ipAddress: ctx.req.ip,
+        });
+
+        if (isHR) {
+          return { success: true, pendingApproval: true };
+        }
+
+        // Auto-approve staff — create session
+        const token = await createSessionToken({
+          openId: newUser.openId,
+          appId: process.env.VITE_APP_ID ?? "tna",
+          name: newUser.name ?? "",
+        });
+        setSessionCookie(ctx.req, ctx.res, token);
+        return { success: true, pendingApproval: false, user: newUser };
+      }),
+
+    login: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email(),
+          password: z.string(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const user = await getUserByEmail(input.email);
+        if (!user || !user.passwordHash) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        }
+        const valid = await verifyPassword(input.password, user.passwordHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        }
+        if (!user.isActive) {
+          if (user.pendingApproval) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Your account is pending approval by an Administrator" });
+          }
+          throw new TRPCError({ code: "FORBIDDEN", message: "Your account has been deactivated" });
+        }
+
+        // Update last signed in
+        await upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+
+        const token = await createSessionToken({
+          openId: user.openId,
+          appId: process.env.VITE_APP_ID ?? "tna",
+          name: user.name ?? "",
+        });
+        setSessionCookie(ctx.req, ctx.res, token);
+
+        await createAuditLog({
+          userId: user.id,
+          userEmail: user.email,
+          userName: user.name ?? undefined,
+          action: "LOGIN",
+          module: "Auth",
+          details: "Custom password login",
+          ipAddress: ctx.req.ip,
+        });
+
+        return { success: true, user };
+      }),
+
+    forgotPassword: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ input }) => {
+        const user = await getUserByEmail(input.email);
+        // Always return success to prevent email enumeration
+        if (!user) return { success: true };
+
+        const token = generateResetToken();
+        const expiry = getResetTokenExpiry();
+        await setResetToken(user.id, token, expiry);
+
+        // In production, send email. For now, return token in response for demo.
+        // TODO: integrate email service
+        console.log(`[Auth] Password reset token for ${input.email}: ${token}`);
+        return { success: true, resetToken: token }; // remove token from response in production
+      }),
+
+    resetPassword: publicProcedure
+      .input(
+        z.object({
+          token: z.string(),
+          newPassword: z.string().min(8),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const user = await getUserByResetToken(input.token);
+        if (!user) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired reset token" });
+
+        const passwordHash = await hashPassword(input.newPassword);
+        await updatePassword(user.id, passwordHash);
+
+        await createAuditLog({
+          userId: user.id,
+          userEmail: user.email,
+          userName: user.name ?? undefined,
+          action: "PASSWORD_RESET",
+          module: "Auth",
+        });
+
+        return { success: true };
+      }),
+
+    // Admin: create user directly
+    adminCreateUser: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().min(2),
+          email: z.string().email(),
+          mobile: z.string().optional(),
+          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin"]),
+          role: z.enum(["user", "admin"]).default("user"),
+          adminLevel: z.enum(["super_admin", "admin", "sector_manager", "question_manager"]).optional(),
+          organization: z.string().optional(),
+          jobTitle: z.string().optional(),
+          department: z.string().optional(),
+          employeeId: z.string().optional(),
+          groupId: z.number().optional(),
+          password: z.string().min(8).optional(),
+          sendActivationEmail: z.boolean().default(false),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+        const existing = await getUserByEmail(input.email);
+        if (existing) throw new TRPCError({ code: "CONFLICT", message: "Email already registered" });
+
+        const openId = generateOpenId();
+        const passwordHash = input.password ? await hashPassword(input.password) : null;
+
+        await upsertUser({
+          openId,
+          name: input.name,
+          email: input.email,
+          mobile: input.mobile ?? null,
+          loginMethod: "password",
+          role: input.role,
+          tnaRole: input.tnaRole,
+          adminLevel: input.adminLevel ?? undefined,
+          organization: input.organization ?? null,
+          jobTitle: input.jobTitle ?? null,
+          department: input.department ?? null,
+          employeeId: input.employeeId ?? null,
+          groupId: input.groupId ?? null,
+          passwordHash: passwordHash ?? undefined,
+          emailVerified: false,
+          isActive: true,
+          pendingApproval: false,
+          lastSignedIn: new Date(),
+        });
+
+        const newUser = await getUserByEmail(input.email);
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          userEmail: ctx.user.email,
+          userName: ctx.user.name ?? undefined,
+          action: "CREATE_USER",
+          module: "User Management",
+          details: `Created user ${input.email} with role ${input.tnaRole}`,
+          ipAddress: ctx.req.ip,
+        });
+
+        return { success: true, user: newUser };
+      }),
+
+    // Admin: approve/activate/deactivate user
+    updateUserStatus: protectedProcedure
+      .input(
+        z.object({
+          userId: z.number(),
+          isActive: z.boolean().optional(),
+          pendingApproval: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        const updateData: Record<string, unknown> = {};
+        if (input.isActive !== undefined) updateData.isActive = input.isActive;
+        if (input.pendingApproval !== undefined) updateData.pendingApproval = input.pendingApproval;
+
+        await db.update(users).set(updateData).where(eq(users.id, input.userId));
+
+        const targetUser = await getUserById(input.userId);
+        await createAuditLog({
+          userId: ctx.user.id,
+          userEmail: ctx.user.email,
+          userName: ctx.user.name ?? undefined,
+          action: input.isActive ? "ACTIVATE_USER" : "DEACTIVATE_USER",
+          module: "User Management",
+          details: `Updated user ID ${input.userId}`,
+          ipAddress: ctx.req.ip,
+        });
+
+        return { success: true };
+      }),
+
+    // Admin: reset another user's password
+    adminResetPassword: protectedProcedure
+      .input(
+        z.object({
+          userId: z.number(),
+          newPassword: z.string().min(8),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const passwordHash = await hashPassword(input.newPassword);
+        await updatePassword(input.userId, passwordHash);
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          userEmail: ctx.user.email,
+          userName: ctx.user.name ?? undefined,
+          action: "ADMIN_RESET_PASSWORD",
+          module: "User Management",
+          details: `Reset password for user ID ${input.userId}`,
+          ipAddress: ctx.req.ip,
+        });
+
+        return { success: true };
+      }),
+
+    // Admin: list all users with filters
+    listUsers: protectedProcedure
+      .input(
+        z.object({
+          search: z.string().optional(),
+          tnaRole: z.string().optional(),
+          isActive: z.boolean().optional(),
+          pendingApproval: z.boolean().optional(),
+        }).optional()
+      )
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await getDb();
+        if (!db) return [];
+
+        let query = db.select().from(users).$dynamic();
+        const conditions = [];
+
+        if (input?.search) {
+          conditions.push(
+            or(
+              like(users.name, `%${input.search}%`),
+              like(users.email, `%${input.search}%`)
+            )
+          );
+        }
+        if (input?.tnaRole) {
+          conditions.push(eq(users.tnaRole, input.tnaRole as any));
+        }
+        if (input?.isActive !== undefined) {
+          conditions.push(eq(users.isActive, input.isActive));
+        }
+        if (input?.pendingApproval !== undefined) {
+          conditions.push(eq(users.pendingApproval, input.pendingApproval));
+        }
+
+        if (conditions.length > 0) {
+          const { and: drizzleAnd } = await import("drizzle-orm");
+          query = query.where(drizzleAnd(...conditions));
+        }
+
+        return query.orderBy(desc(users.createdAt));
+      }),
+
+    // Audit logs
+    getAuditLogs: protectedProcedure
+      .input(
+        z.object({
+          limit: z.number().default(25),
+          offset: z.number().default(0),
+          action: z.string().optional(),
+          search: z.string().optional(),
+        }).optional()
+      )
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await getDb();
+        if (!db) return { logs: [], total: 0 };
+        const conditions: any[] = [];
+        if (input?.action) conditions.push(eq(auditLogs.action, input.action));
+        if (input?.search) {
+          const q = `%${input.search}%`;
+          conditions.push(sql`(${auditLogs.userName} LIKE ${q} OR ${auditLogs.userEmail} LIKE ${q})`);
+        }
+        const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+        const [rows, countRows] = await Promise.all([
+          db.select().from(auditLogs)
+            .where(whereClause)
+            .orderBy(desc(auditLogs.createdAt))
+            .limit(input?.limit ?? 25)
+            .offset(input?.offset ?? 0),
+          db.select({ count: sql<number>`count(*)` }).from(auditLogs).where(whereClause),
+        ]);
+        return { logs: rows, total: Number(countRows[0]?.count ?? 0) };
+      }),
+        // Complete profile (for users with missing info)
+    completeProfile: protectedProcedure
+      .input(
+        z.object({
+          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin"]).optional(),
+          department: z.string().optional(),
+          organization: z.string().optional(),
+          jobTitle: z.string().optional(),
+          groupId: z.number().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const updateData: Record<string, unknown> = {};
+        if (input.tnaRole) updateData.tnaRole = input.tnaRole;
+        if (input.department) updateData.department = input.department;
+        if (input.organization) updateData.organization = input.organization;
+        if (input.jobTitle) updateData.jobTitle = input.jobTitle;
+        if (input.groupId !== undefined) updateData.groupId = input.groupId;
+        await db.update(users).set(updateData).where(eq(users.id, ctx.user.id));
+        return { success: true };
+      }),
+  }),
+
   system: systemRouter,
 
   // ─── Auth ──────────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ export const users = mysqlTable("users", {
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  mobile: varchar("mobile", { length: 30 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   // TNA-specific role
@@ -24,6 +25,19 @@ export const users = mysqlTable("users", {
   adminLevel: mysqlEnum("adminLevel", ["super_admin", "admin", "sector_manager", "question_manager"]).default("admin"),
   organization: varchar("organization", { length: 255 }),
   jobTitle: varchar("jobTitle", { length: 255 }),
+  department: varchar("department", { length: 255 }),
+  employeeId: varchar("employeeId", { length: 100 }),
+  // Custom auth fields
+  passwordHash: varchar("passwordHash", { length: 255 }),
+  emailVerified: boolean("emailVerified").default(false).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  pendingApproval: boolean("pendingApproval").default(false).notNull(),
+  resetToken: varchar("resetToken", { length: 255 }),
+  resetTokenExpiry: timestamp("resetTokenExpiry"),
+  // HR Officer registration fields
+  hrJustification: text("hrJustification"),
+  // Group assignment (for staff)
+  groupId: int("groupId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -330,3 +344,18 @@ export const groupAnalysisSections = mysqlTable("group_analysis_sections", {
 });
 export type GroupAnalysisSection = typeof groupAnalysisSections.$inferSelect;
 export type InsertGroupAnalysisSection = typeof groupAnalysisSections.$inferInsert;
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").references(() => users.id),
+  userEmail: varchar("userEmail", { length: 320 }),
+  userName: varchar("userName", { length: 255 }),
+  action: varchar("action", { length: 100 }).notNull(),
+  module: varchar("module", { length: 100 }).notNull(),
+  details: text("details"),
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;

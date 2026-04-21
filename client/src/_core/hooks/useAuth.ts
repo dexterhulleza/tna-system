@@ -65,7 +65,9 @@ export function useAuth(options?: UseAuthOptions) {
     if (meQuery.isLoading || logoutMutation.isPending) return;
     if (state.user) return;
     if (typeof window === "undefined") return;
-    if (window.location.pathname === redirectPath) return;
+    // Don't redirect if already on an auth page
+    const authPages = ["/login", "/register", "/forgot-password", "/reset-password"];
+    if (authPages.some(p => window.location.pathname.startsWith(p))) return;
 
     window.location.href = redirectPath
   }, [

@@ -49,7 +49,7 @@ export default function StaffLayout({ children }: StaffLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   if (!loading && !isAuthenticated) {
-    window.location.href = getLoginUrl("/dashboard");
+    window.location.href = "/login?returnPath=%2Fdashboard";
     return null;
   }
 

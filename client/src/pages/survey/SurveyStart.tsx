@@ -61,7 +61,7 @@ export default function SurveyStart() {
   const [respondentHighestEducation, setRespondentHighestEducation] = useState("");
 
   if (!isAuthenticated) {
-    window.location.href = getLoginUrl("/survey/start");
+    navigate("/login?returnPath=%2Fsurvey%2Fstart");
     return null;
   }
 

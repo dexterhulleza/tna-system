@@ -24,6 +24,11 @@ import CompanyInfo from "@/pages/admin/CompanyInfo";
 import AdminResults from "@/pages/admin/AdminResults";
 import SurveyConfiguration from "./pages/admin/SurveyConfiguration";
 import ProfileSetup from "./pages/ProfileSetup";
+import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 
 /** Wrap a page component in AdminLayout */
@@ -66,6 +71,13 @@ function Router() {
         <Route path="/admin/company-info" component={withAdminLayout(CompanyInfo)} />
         <Route path="/admin/results" component={withAdminLayout(AdminResults)} />
 
+      {/* Auth routes */}
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
+      {/* Admin audit logs */}
+      <Route path="/admin/audit-logs" component={withAdminLayout(AdminAuditLogs)} />
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
