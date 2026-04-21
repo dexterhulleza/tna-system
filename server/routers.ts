@@ -264,7 +264,7 @@ export const appRouter = router({
           name: z.string().min(2),
           email: z.string().email(),
           mobile: z.string().optional(),
-          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin"]),
+          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin", "ld_officer", "line_manager", "employee", "executive_reviewer"]),
           role: z.enum(["user", "admin"]).default("user"),
           adminLevel: z.enum(["super_admin", "admin", "sector_manager", "question_manager"]).optional(),
           organization: z.string().optional(),
@@ -278,6 +278,15 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        // ROLE GOVERNANCE: HR Officers cannot assign System Administrator role
+        const callerIsHrOfficer = ctx.user.tnaRole === "hr_officer";
+        const targetIsAdmin = input.tnaRole === "admin" || input.role === "admin";
+        if (callerIsHrOfficer && targetIsAdmin) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only System Administrators can assign the System Administrator role.",
+          });
+        }
 
         const existing = await getUserByEmail(input.email);
         if (existing) throw new TRPCError({ code: "CONFLICT", message: "Email already registered" });
@@ -460,7 +469,7 @@ export const appRouter = router({
     completeProfile: protectedProcedure
       .input(
         z.object({
-          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin"]).optional(),
+          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin", "ld_officer", "line_manager", "employee", "executive_reviewer"]).optional(),
           department: z.string().optional(),
           organization: z.string().optional(),
           jobTitle: z.string().optional(),
@@ -498,7 +507,7 @@ export const appRouter = router({
     updateProfile: protectedProcedure
       .input(
         z.object({
-          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin"]).optional(),
+          tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin", "ld_officer", "line_manager", "employee", "executive_reviewer"]).optional(),
           organization: z.string().optional(),
           jobTitle: z.string().optional(),
         })
@@ -1248,13 +1257,22 @@ Write in a professional but accessible tone. Use actual data numbers from the su
           z.object({
             userId: z.number(),
             role: z.enum(["user", "admin"]),
-            tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin"]),
+            tnaRole: z.enum(["industry_worker", "trainer", "assessor", "hr_officer", "admin", "ld_officer", "line_manager", "employee", "executive_reviewer"]),
             adminLevel: z.enum(["super_admin", "admin", "sector_manager", "question_manager"]).optional(),
             organization: z.string().optional(),
             jobTitle: z.string().optional(),
           })
         )
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
+          // ROLE GOVERNANCE: HR Officers cannot assign System Administrator role
+          const callerIsHrOfficer = ctx.user.tnaRole === "hr_officer";
+          const targetIsAdmin = input.tnaRole === "admin" || input.role === "admin";
+          if (callerIsHrOfficer && targetIsAdmin) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Only System Administrators can assign the System Administrator role.",
+            });
+          }
           await updateUserProfile(input.userId, input);
           return { success: true };
         }),

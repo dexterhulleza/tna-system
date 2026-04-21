@@ -20,7 +20,7 @@ export const users = mysqlTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   // TNA-specific role
-  tnaRole: mysqlEnum("tnaRole", ["industry_worker", "trainer", "assessor", "hr_officer", "admin"]).default("industry_worker"),
+  tnaRole: mysqlEnum("tnaRole", ["industry_worker", "trainer", "assessor", "hr_officer", "admin", "ld_officer", "line_manager", "employee", "executive_reviewer"]).default("industry_worker"),
   // Admin level (only relevant when role = admin)
   adminLevel: mysqlEnum("adminLevel", ["super_admin", "admin", "sector_manager", "question_manager"]).default("admin"),
   organization: varchar("organization", { length: 255 }),

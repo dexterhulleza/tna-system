@@ -283,3 +283,17 @@
 - [x] App.tsx — registered /login, /register, /forgot-password, /reset-password, /admin/audit-logs routes
 - [x] All getLoginUrl() usages updated to point to /login instead of Manus OAuth portal
 - [x] 27 tests passing, 0 TypeScript errors
+
+## Role Governance Rules (Apr 22, 2026)
+- [x] DB: extend tnaRole enum to include ld_officer, line_manager, employee, executive_reviewer (migration 0007)
+- [x] Backend guard in customAuth.adminCreateUser: HR Officers cannot assign admin/System Admin role (TRPCError FORBIDDEN)
+- [x] Backend guard in admin.users.updateRole: HR Officers cannot assign admin/System Admin role
+- [x] Updated all tnaRole z.enum() in routers.ts to include all 9 role values
+- [x] AdminUsers.tsx rewritten with full role governance UI:
+  - HR Officer view: checkboxes for L&D Officer, Line Manager/Supervisor, Employee Respondent, Executive Reviewer only (System Admin hidden)
+  - System Admin view: all 6 roles including System Administrator with ShieldAlert icon
+  - Amber alert banner for HR Officers explaining their role assignment scope
+  - Red alert when HR Officer opens edit dialog for a System Administrator user
+  - Save button disabled when HR Officer is editing a System Admin user
+  - Role filter dropdown hides System Administrator option for HR Officers
+  - Add User dialog also uses checkbox-based role picker with same governance rules

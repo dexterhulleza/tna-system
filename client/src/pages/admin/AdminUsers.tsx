@@ -8,25 +8,53 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
   Users, Search, Settings2, Loader2, Shield, UserPlus,
   CheckCircle, XCircle, UserCheck, UserX, Eye, EyeOff,
-  Clock, RefreshCw, KeyRound
+  Clock, RefreshCw, KeyRound, AlertTriangle, ShieldAlert
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 
-const TNA_ROLE_LABELS: Record<string, string> = {
-  industry_worker: "Industry Worker",
-  trainer: "Trainer",
-  assessor: "Assessor",
-  hr_officer: "HR Officer",
-  admin: "Administrator",
-};
+// ─── Role definitions ──────────────────────────────────────────────────────────
+
+/** All roles that exist in the system */
+const ALL_ROLES: { value: string; label: string; description: string }[] = [
+  { value: "hr_officer",          label: "HR Officer",               description: "Manages TNA process within their company" },
+  { value: "ld_officer",          label: "L&D Officer",              description: "Learning & Development specialist" },
+  { value: "line_manager",        label: "Line Manager / Supervisor", description: "Direct supervisor of respondents" },
+  { value: "employee",            label: "Employee Respondent",       description: "Completes TNA assessments" },
+  { value: "executive_reviewer",  label: "Executive Reviewer",        description: "Reviews and approves TNA outputs" },
+  { value: "admin",               label: "System Administrator",      description: "Full system access — assign with caution" },
+];
+
+/** Roles an HR Officer is allowed to assign (SYSTEM_ADMIN excluded) */
+const HR_OFFICER_ASSIGNABLE = ["ld_officer", "line_manager", "employee", "executive_reviewer"];
+
+/** Roles a System Administrator can assign (all roles) */
+const SYSTEM_ADMIN_ASSIGNABLE = ALL_ROLES.map((r) => r.value);
+
+/** Human-readable labels for display */
+const TNA_ROLE_LABELS: Record<string, string> = Object.fromEntries(
+  ALL_ROLES.map((r) => [r.value, r.label])
+);
+// Legacy label support
+TNA_ROLE_LABELS["industry_worker"] = "Industry Worker";
+TNA_ROLE_LABELS["trainer"] = "Trainer";
+TNA_ROLE_LABELS["assessor"] = "Assessor";
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AdminUsers() {
   const { user: currentUser } = useAuth();
+
+  // Determine caller's authority level
+  const callerIsHrOfficer = currentUser?.tnaRole === "hr_officer";
+  const callerIsSystemAdmin = currentUser?.tnaRole === "admin" || currentUser?.role === "admin";
+  const assignableRoles = callerIsSystemAdmin ? SYSTEM_ADMIN_ASSIGNABLE : HR_OFFICER_ASSIGNABLE;
+
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -39,7 +67,7 @@ export default function AdminUsers() {
 
   const [addForm, setAddForm] = useState({
     name: "", email: "", mobile: "", password: "",
-    tnaRole: "industry_worker" as any,
+    tnaRole: "employee" as string,
     role: "user" as "user" | "admin",
     organization: "", jobTitle: "", department: "", employeeId: "",
   });
@@ -75,7 +103,7 @@ export default function AdminUsers() {
 
   const resetAddForm = () => setAddForm({
     name: "", email: "", mobile: "", password: "",
-    tnaRole: "industry_worker", role: "user",
+    tnaRole: "employee", role: "user",
     organization: "", jobTitle: "", department: "", employeeId: "",
   });
 
@@ -91,7 +119,7 @@ export default function AdminUsers() {
     setEditingUser(u);
     setEditForm({
       role: u.role || "user",
-      tnaRole: u.tnaRole || "industry_worker",
+      tnaRole: u.tnaRole || "employee",
       adminLevel: u.adminLevel || "",
       organization: u.organization || "",
       jobTitle: u.jobTitle || "",
@@ -107,6 +135,11 @@ export default function AdminUsers() {
 
   const handleSave = () => {
     if (!editingUser) return;
+    // Frontend guard: HR Officer cannot assign System Administrator
+    if (callerIsHrOfficer && (editForm.tnaRole === "admin" || editForm.role === "admin")) {
+      toast.error("Only System Administrators can assign the System Administrator role.");
+      return;
+    }
     updateRole.mutate({
       userId: editingUser.id,
       role: editForm.role,
@@ -120,6 +153,10 @@ export default function AdminUsers() {
     }
   };
 
+  // Check if the user being edited currently has System Admin role
+  const editingUserIsSystemAdmin = editingUser?.tnaRole === "admin" || editingUser?.role === "admin";
+  const hrOfficerEditingAdmin = callerIsHrOfficer && editingUserIsSystemAdmin;
+
   const UserCard = ({ u }: { u: any }) => (
     <div className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
       <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
@@ -130,8 +167,11 @@ export default function AdminUsers() {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm truncate">{u.name ?? "—"}</span>
-          <Badge variant={u.role === "admin" ? "default" : "secondary"} className="text-xs shrink-0">
-            {u.role === "admin" ? <Shield className="w-3 h-3 mr-1" /> : null}
+          <Badge
+            variant={u.tnaRole === "admin" ? "default" : "secondary"}
+            className={`text-xs shrink-0 ${u.tnaRole === "admin" ? "bg-purple-600" : ""}`}
+          >
+            {u.tnaRole === "admin" ? <ShieldAlert className="w-3 h-3 mr-1" /> : u.role === "admin" ? <Shield className="w-3 h-3 mr-1" /> : null}
             {TNA_ROLE_LABELS[u.tnaRole] ?? u.tnaRole ?? "Unknown"}
           </Badge>
           {!u.isActive && (
@@ -177,6 +217,16 @@ export default function AdminUsers() {
         </Button>
       </div>
 
+      {/* Role governance notice for HR Officers */}
+      {callerIsHrOfficer && (
+        <Alert className="border-amber-300 bg-amber-50">
+          <AlertTriangle className="w-4 h-4 text-amber-600" />
+          <AlertDescription className="text-amber-800 text-sm">
+            <strong>Role Governance:</strong> As an HR Officer, you can assign L&D Officer, Line Manager / Supervisor, Employee Respondent, and Executive Reviewer roles within your company. Only System Administrators can assign the System Administrator role.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Tabs defaultValue="all">
         <TabsList>
           <TabsTrigger value="all">
@@ -205,7 +255,7 @@ export default function AdminUsers() {
                   />
                 </div>
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger className="w-44">
+                  <SelectTrigger className="w-52">
                     <SelectValue placeholder="Filter by role" />
                   </SelectTrigger>
                   <SelectContent>
@@ -214,7 +264,11 @@ export default function AdminUsers() {
                     <SelectItem value="trainer">Trainer</SelectItem>
                     <SelectItem value="assessor">Assessor</SelectItem>
                     <SelectItem value="hr_officer">HR Officer</SelectItem>
-                    <SelectItem value="admin">Administrator</SelectItem>
+                    <SelectItem value="ld_officer">L&D Officer</SelectItem>
+                    <SelectItem value="line_manager">Line Manager / Supervisor</SelectItem>
+                    <SelectItem value="employee">Employee Respondent</SelectItem>
+                    <SelectItem value="executive_reviewer">Executive Reviewer</SelectItem>
+                    {callerIsSystemAdmin && <SelectItem value="admin">System Administrator</SelectItem>}
                   </SelectContent>
                 </Select>
                 <Button variant="ghost" size="icon" onClick={() => refetch()} title="Refresh">
@@ -297,33 +351,61 @@ export default function AdminUsers() {
 
       {/* Edit User Dialog */}
       <Dialog open={!!editingUser} onOpenChange={(o) => !o && setEditingUser(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Edit User: {editingUser?.name}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit User: {editingUser?.name}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>System Role</Label>
-              <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
+
+            {/* Warning: HR Officer trying to edit a System Admin */}
+            {hrOfficerEditingAdmin && (
+              <Alert className="border-red-300 bg-red-50">
+                <ShieldAlert className="w-4 h-4 text-red-600" />
+                <AlertDescription className="text-red-800 text-sm">
+                  This user has the <strong>System Administrator</strong> role. You cannot modify their role assignment. Only a System Administrator can change this.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Role Assignment — Checkbox-based per spec */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Assign Role</Label>
+              <p className="text-xs text-muted-foreground">
+                {callerIsHrOfficer
+                  ? "As an HR Officer, you can assign the following roles within your company."
+                  : "As a System Administrator, you can assign any role."}
+              </p>
+              <div className="space-y-2 pt-1">
+                {ALL_ROLES.filter((r) => assignableRoles.includes(r.value)).map((r) => (
+                  <div key={r.value} className="flex items-start gap-3 p-2.5 rounded-md border hover:bg-accent/20">
+                    <Checkbox
+                      id={`role-${r.value}`}
+                      checked={editForm.tnaRole === r.value}
+                      disabled={hrOfficerEditingAdmin}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setEditForm({
+                            ...editForm,
+                            tnaRole: r.value,
+                            role: r.value === "admin" ? "admin" : "user",
+                          });
+                        }
+                      }}
+                    />
+                    <label htmlFor={`role-${r.value}`} className={`flex-1 cursor-pointer ${hrOfficerEditingAdmin ? "opacity-50" : ""}`}>
+                      <div className="text-sm font-medium flex items-center gap-1.5">
+                        {r.value === "admin" && <ShieldAlert className="w-3.5 h-3.5 text-purple-600" />}
+                        {r.label}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{r.description}</div>
+                    </label>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>TNA Role</Label>
-              <Select value={editForm.tnaRole} onValueChange={(v) => setEditForm({ ...editForm, tnaRole: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="industry_worker">Industry Worker</SelectItem>
-                  <SelectItem value="trainer">Trainer</SelectItem>
-                  <SelectItem value="assessor">Assessor</SelectItem>
-                  <SelectItem value="hr_officer">HR Officer</SelectItem>
-                  <SelectItem value="admin">Administrator</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {editForm.role === "admin" && (
+
+            {/* Admin Level — only shown for System Admin callers assigning admin role */}
+            {callerIsSystemAdmin && editForm.tnaRole === "admin" && (
               <div className="space-y-1.5">
                 <Label>Admin Level</Label>
                 <Select value={editForm.adminLevel} onValueChange={(v) => setEditForm({ ...editForm, adminLevel: v })}>
@@ -337,6 +419,7 @@ export default function AdminUsers() {
                 </Select>
               </div>
             )}
+
             <div className="space-y-1.5">
               <Label>Organization</Label>
               <Input value={editForm.organization} onChange={(e) => setEditForm({ ...editForm, organization: e.target.value })} placeholder="Company/Institution" />
@@ -345,7 +428,9 @@ export default function AdminUsers() {
               <Label>Job Title</Label>
               <Input value={editForm.jobTitle} onChange={(e) => setEditForm({ ...editForm, jobTitle: e.target.value })} placeholder="Job title" />
             </div>
-            {editForm.role === "admin" && (
+
+            {/* Permissions — only for System Admin callers editing admin users */}
+            {callerIsSystemAdmin && editForm.tnaRole === "admin" && (
               <div className="space-y-2 pt-2 border-t">
                 <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Permissions</Label>
                 {[
@@ -365,7 +450,11 @@ export default function AdminUsers() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={updateRole.isPending}>
+            <Button
+              onClick={handleSave}
+              disabled={updateRole.isPending || hrOfficerEditingAdmin}
+              title={hrOfficerEditingAdmin ? "Cannot modify System Administrator role" : undefined}
+            >
               {updateRole.isPending ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}Save Changes
             </Button>
           </DialogFooter>
@@ -376,7 +465,29 @@ export default function AdminUsers() {
       <Dialog open={showAddUser} onOpenChange={(o) => { if (!o) { setShowAddUser(false); resetAddForm(); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add New User</DialogTitle></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); adminCreateUser.mutate({ name: addForm.name, email: addForm.email, mobile: addForm.mobile || undefined, password: addForm.password || undefined, tnaRole: addForm.tnaRole, role: addForm.role, organization: addForm.organization || undefined, jobTitle: addForm.jobTitle || undefined, department: addForm.department || undefined, employeeId: addForm.employeeId || undefined }); }} className="space-y-4 py-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              // Frontend guard
+              if (callerIsHrOfficer && (addForm.tnaRole === "admin" || addForm.role === "admin")) {
+                toast.error("Only System Administrators can assign the System Administrator role.");
+                return;
+              }
+              adminCreateUser.mutate({
+                name: addForm.name,
+                email: addForm.email,
+                mobile: addForm.mobile || undefined,
+                password: addForm.password || undefined,
+                tnaRole: addForm.tnaRole as any,
+                role: addForm.role,
+                organization: addForm.organization || undefined,
+                jobTitle: addForm.jobTitle || undefined,
+                department: addForm.department || undefined,
+                employeeId: addForm.employeeId || undefined,
+              });
+            }}
+            className="space-y-4 py-2"
+          >
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5 col-span-2">
                 <Label>Full Name <span className="text-red-500">*</span></Label>
@@ -386,29 +497,36 @@ export default function AdminUsers() {
                 <Label>Email <span className="text-red-500">*</span></Label>
                 <Input type="email" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} placeholder="user@example.com" required />
               </div>
-              <div className="space-y-1.5">
-                <Label>TNA Role <span className="text-red-500">*</span></Label>
-                <Select value={addForm.tnaRole} onValueChange={(v) => setAddForm({ ...addForm, tnaRole: v as any })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="industry_worker">Industry Worker</SelectItem>
-                    <SelectItem value="trainer">Trainer</SelectItem>
-                    <SelectItem value="assessor">Assessor</SelectItem>
-                    <SelectItem value="hr_officer">HR Officer</SelectItem>
-                    <SelectItem value="admin">Administrator</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              {/* Role assignment — checkbox-based per spec */}
+              <div className="space-y-2 col-span-2">
+                <Label className="text-sm font-semibold">Assign Role <span className="text-red-500">*</span></Label>
+                <div className="space-y-1.5">
+                  {ALL_ROLES.filter((r) => assignableRoles.includes(r.value)).map((r) => (
+                    <div key={r.value} className="flex items-center gap-2.5 p-2 rounded border hover:bg-accent/20">
+                      <Checkbox
+                        id={`add-role-${r.value}`}
+                        checked={addForm.tnaRole === r.value}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setAddForm({
+                              ...addForm,
+                              tnaRole: r.value,
+                              role: r.value === "admin" ? "admin" : "user",
+                            });
+                          }
+                        }}
+                      />
+                      <label htmlFor={`add-role-${r.value}`} className="text-sm cursor-pointer flex items-center gap-1.5">
+                        {r.value === "admin" && <ShieldAlert className="w-3.5 h-3.5 text-purple-600" />}
+                        <span className="font-medium">{r.label}</span>
+                        <span className="text-xs text-muted-foreground">— {r.description}</span>
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>System Role</Label>
-                <Select value={addForm.role} onValueChange={(v) => setAddForm({ ...addForm, role: v as any })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+
               <div className="space-y-1.5">
                 <Label>Department</Label>
                 <Input value={addForm.department} onChange={(e) => setAddForm({ ...addForm, department: e.target.value })} placeholder="e.g. IT" />
@@ -420,6 +538,10 @@ export default function AdminUsers() {
               <div className="space-y-1.5 col-span-2">
                 <Label>Organization</Label>
                 <Input value={addForm.organization} onChange={(e) => setAddForm({ ...addForm, organization: e.target.value })} placeholder="Company/Institution" />
+              </div>
+              <div className="space-y-1.5 col-span-2">
+                <Label>Job Title</Label>
+                <Input value={addForm.jobTitle} onChange={(e) => setAddForm({ ...addForm, jobTitle: e.target.value })} placeholder="e.g. Training Coordinator" />
               </div>
               <div className="space-y-1.5 col-span-2">
                 <Label>Initial Password</Label>

@@ -1,0 +1,1 @@
+ALTER TABLE `users` MODIFY COLUMN `tnaRole` enum('industry_worker','trainer','assessor','hr_officer','admin','ld_officer','line_manager','employee','executive_reviewer') DEFAULT 'industry_worker';
