@@ -307,3 +307,75 @@
 - [x] Frontend: ProfileSetup.tsx — Work Information section shown for industry_worker/employee roles with PsocWorkFunctionPicker
 - [x] Frontend: ProfileSetup.tsx — Password Change section now calls customAuth.changePassword (real password change)
 - [x] 27 tests passing, 0 TypeScript errors
+
+## T1-4 TESDA Reference Library (Apr 22, 2026)
+- [x] DB: add tesdaReferences table (trCode, qualificationTitle, csUnitCode, csUnitTitle, competencyLevel, referenceType TR/CS/Supermarket, industry, isActive, createdBy, updatedBy) — migration 0009
+- [x] Backend: tesda.list procedure — paginated, filterable by type/level/industry/search/activeOnly
+- [x] Backend: tesda.getById procedure — fetch single reference by ID
+- [x] Backend: tesda.upsert procedure — create or update reference (admin/hr_officer only)
+- [x] Backend: tesda.delete procedure — soft-delete (admin/hr_officer only)
+- [x] Backend: tesda.toggleActive procedure — toggle isActive flag
+- [x] Frontend: AdminTesdaLibrary.tsx — full CRUD page with search, type filter, active toggle, add/edit dialog
+- [x] App.tsx: /admin/tesda-library route registered
+- [x] AdminLayout.tsx: TESDA Library link added under TNA Engine section
+
+## T1-5 Task-to-Competency Mapping (Apr 22, 2026)
+- [x] DB: add taskCompetencyMappings table (questionId, tesdaReferenceId, relevanceScore, mappingNotes, mappedBy) — migration 0010
+- [x] Backend: taskMapping.listByQuestion procedure — list all mappings for a question with joined TESDA reference data
+- [x] Backend: taskMapping.listByReference procedure — list all mappings for a TESDA reference
+- [x] Backend: taskMapping.upsert procedure — create or update mapping with relevance score
+- [x] Backend: taskMapping.delete procedure — remove a mapping
+- [x] Backend: taskMapping.aiSuggest procedure — AI-assisted suggestions for mapping a question to TESDA references
+- [x] Frontend: AdminTaskMapping.tsx — question browser with competency mapping panel, AI suggest button, relevance slider
+- [x] App.tsx: /admin/task-mapping route registered
+- [x] AdminLayout.tsx: Task Mapping link added under TNA Engine section
+
+## T1-6 Weighted Multi-Source Scoring (Apr 22, 2026)
+- [x] DB: extended surveyResponses table with supervisorScore, kpiScore, supervisorNotes, supervisorValidatedAt, supervisorId columns — migration 0011
+- [x] DB: add scoringWeights table (selfWeight, supervisorWeight, kpiWeight, requireSupervisorValidation, fallbackToSelfOnly, updatedBy) — migration 0011
+- [x] Migration 0011 applied to database
+- [x] Backend: server/db.ts — getScoringWeights(), upsertScoringWeights(), computeWeightedScore() helpers added
+- [x] Backend: scoringWeights.get procedure — fetch current weights (returns defaults if none exist)
+- [x] Backend: scoringWeights.update procedure — save new weights (validates sum = 1.0)
+- [x] Frontend: AdminScoringWeights.tsx — weight sliders (self/supervisor/KPI), visual distribution bar, presets, validation rule toggles, formula explanation
+- [x] App.tsx: /admin/scoring-weights route registered
+- [x] AdminLayout.tsx: Scoring Weights link added under TNA Engine section
+- [x] AdminLayout.tsx: TNA Engine collapsible group added (TESDA Library, Task Mapping, Scoring Weights)
+- [x] AdminLayout.tsx: refactored to per-group open state (openGroups map) to support multiple collapsible sections
+- [x] 0 TypeScript errors, all tests passing
+
+## T1-4 TESDA Reference Library (Apr 22, 2026)
+- [x] DB: add tesdaReferences table (trCode, qualificationTitle, csUnitCode, csUnitTitle, competencyLevel, referenceType TR/CS/Supermarket, industry, isActive, createdBy, updatedBy) — migration 0009
+- [x] Backend: tesda.list procedure — paginated, filterable by type/level/industry/search/activeOnly
+- [x] Backend: tesda.getById procedure — fetch single reference by ID
+- [x] Backend: tesda.upsert procedure — create or update reference (admin/hr_officer only)
+- [x] Backend: tesda.delete procedure — soft-delete (admin/hr_officer only)
+- [x] Backend: tesda.toggleActive procedure — toggle isActive flag
+- [x] Frontend: AdminTesdaLibrary.tsx — full CRUD page with search, type filter, active toggle, add/edit dialog
+- [x] App.tsx: /admin/tesda-library route registered
+- [x] AdminLayout.tsx: TESDA Library link added under TNA Engine section
+
+## T1-5 Task-to-Competency Mapping (Apr 22, 2026)
+- [x] DB: add taskCompetencyMappings table (questionId, tesdaReferenceId, relevanceScore, mappingNotes, mappedBy) — migration 0010
+- [x] Backend: taskMapping.listByQuestion procedure — list all mappings for a question with joined TESDA reference data
+- [x] Backend: taskMapping.listByReference procedure — list all mappings for a TESDA reference
+- [x] Backend: taskMapping.upsert procedure — create or update mapping with relevance score
+- [x] Backend: taskMapping.delete procedure — remove a mapping
+- [x] Backend: taskMapping.aiSuggest procedure — AI-assisted suggestions for mapping a question to TESDA references
+- [x] Frontend: AdminTaskMapping.tsx — question browser with competency mapping panel, AI suggest button, relevance slider
+- [x] App.tsx: /admin/task-mapping route registered
+- [x] AdminLayout.tsx: Task Mapping link added under TNA Engine section
+
+## T1-6 Weighted Multi-Source Scoring (Apr 22, 2026)
+- [x] DB: extended surveyResponses table with supervisorScore, kpiScore, supervisorNotes, supervisorValidatedAt, supervisorId columns — migration 0011
+- [x] DB: add scoringWeights table (selfWeight, supervisorWeight, kpiWeight, requireSupervisorValidation, fallbackToSelfOnly, updatedBy) — migration 0011
+- [x] Migration 0011 applied to database
+- [x] Backend: server/db.ts — getScoringWeights(), upsertScoringWeights(), computeWeightedScore() helpers added
+- [x] Backend: scoringWeights.get procedure — fetch current weights (returns defaults if none exist)
+- [x] Backend: scoringWeights.update procedure — save new weights (validates sum = 1.0)
+- [x] Frontend: AdminScoringWeights.tsx — weight sliders (self/supervisor/KPI), visual distribution bar, presets, validation rule toggles, formula explanation
+- [x] App.tsx: /admin/scoring-weights route registered
+- [x] AdminLayout.tsx: Scoring Weights link added under TNA Engine section
+- [x] AdminLayout.tsx: TNA Engine collapsible group added (TESDA Library, Task Mapping, Scoring Weights)
+- [x] AdminLayout.tsx: refactored to per-group open state (openGroups map) to support multiple collapsible sections
+- [x] 0 TypeScript errors, all tests passing

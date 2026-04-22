@@ -56,6 +56,8 @@ import {
   getGroupAnalysisSection,
   upsertGroupAnalysisSection,
   deleteGroupAnalysisSection,
+  getScoringWeights,
+  upsertScoringWeights,
 } from "./db";
 import { analyzeGaps, generateRecommendations } from "./tnaEngine";
 import {
@@ -74,7 +76,7 @@ import {
   generateOpenId,
 } from "./customAuth";
 import { upsertUser, getDb } from "./db";
-import { users, auditLogs } from "../drizzle/schema";
+import { users, auditLogs, tesdaReferences, taskCompetencyMappings } from "../drizzle/schema";
 import { and, desc, eq, like, or, sql } from "drizzle-orm";
 
 // ─── Helper: check admin ───────────────────────────────────────────────────────
@@ -1569,7 +1571,297 @@ Requirements:
           return { success: true, inserted: rows.length };
         }),
     }),
+  // ─── Task-to-Competency Mappings (T1-5) ─────────────────────────────────────
+  taskMapping: router({
+    // List all mappings for a given question
+    listByQuestion: protectedProcedure
+      .input(z.object({ questionId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const rows = await db
+          .select({
+            id: taskCompetencyMappings.id,
+            questionId: taskCompetencyMappings.questionId,
+            tesdaReferenceId: taskCompetencyMappings.tesdaReferenceId,
+            relevanceScore: taskCompetencyMappings.relevanceScore,
+            notes: taskCompetencyMappings.notes,
+            mappingSource: taskCompetencyMappings.mappingSource,
+            createdAt: taskCompetencyMappings.createdAt,
+            trCode: tesdaReferences.trCode,
+            qualificationTitle: tesdaReferences.qualificationTitle,
+            csUnitCode: tesdaReferences.csUnitCode,
+            csUnitTitle: tesdaReferences.csUnitTitle,
+            competencyLevel: tesdaReferences.competencyLevel,
+            referenceType: tesdaReferences.referenceType,
+          })
+          .from(taskCompetencyMappings)
+          .innerJoin(tesdaReferences, eq(taskCompetencyMappings.tesdaReferenceId, tesdaReferences.id))
+          .where(eq(taskCompetencyMappings.questionId, input.questionId));
+        return rows;
+      }),
+
+    // List all mappings (optionally filtered by groupId)
+    listAll: protectedProcedure
+      .input(z.object({ groupId: z.number().optional() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { questions: questionsTable } = await import("../drizzle/schema");
+        const baseQuery = db
+          .select({
+            id: taskCompetencyMappings.id,
+            questionId: taskCompetencyMappings.questionId,
+            questionText: questionsTable.questionText,
+            tesdaReferenceId: taskCompetencyMappings.tesdaReferenceId,
+            relevanceScore: taskCompetencyMappings.relevanceScore,
+            notes: taskCompetencyMappings.notes,
+            mappingSource: taskCompetencyMappings.mappingSource,
+            trCode: tesdaReferences.trCode,
+            qualificationTitle: tesdaReferences.qualificationTitle,
+            csUnitCode: tesdaReferences.csUnitCode,
+            csUnitTitle: tesdaReferences.csUnitTitle,
+            competencyLevel: tesdaReferences.competencyLevel,
+            referenceType: tesdaReferences.referenceType,
+          })
+          .from(taskCompetencyMappings)
+          .innerJoin(tesdaReferences, eq(taskCompetencyMappings.tesdaReferenceId, tesdaReferences.id))
+          .innerJoin(questionsTable, eq(taskCompetencyMappings.questionId, questionsTable.id));
+        if (input.groupId !== undefined) {
+          return baseQuery.where(eq(questionsTable.groupId, input.groupId));
+        }
+        return baseQuery;
+      }),
+
+    upsert: protectedProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        questionId: z.number(),
+        tesdaReferenceId: z.number(),
+        relevanceScore: z.number().min(0).max(1).optional().default(1.0),
+        notes: z.string().optional().nullable(),
+        mappingSource: z.enum(["manual", "ai"]).optional().default("manual"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin" && ctx.user.tnaRole !== "hr_officer") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        if (input.id) {
+          await db.update(taskCompetencyMappings)
+            .set({ relevanceScore: input.relevanceScore, notes: input.notes ?? null, mappingSource: input.mappingSource })
+            .where(eq(taskCompetencyMappings.id, input.id));
+          return { id: input.id };
+        } else {
+          // Prevent duplicate mapping for same question+reference
+          const [existing] = await db.select({ id: taskCompetencyMappings.id })
+            .from(taskCompetencyMappings)
+            .where(and(
+              eq(taskCompetencyMappings.questionId, input.questionId),
+              eq(taskCompetencyMappings.tesdaReferenceId, input.tesdaReferenceId),
+            ));
+          if (existing) throw new TRPCError({ code: "CONFLICT", message: "Mapping already exists for this question and reference." });
+          const [result] = await db.insert(taskCompetencyMappings).values({
+            questionId: input.questionId,
+            tesdaReferenceId: input.tesdaReferenceId,
+            relevanceScore: input.relevanceScore,
+            notes: input.notes ?? null,
+            mappingSource: input.mappingSource,
+            createdBy: ctx.user.id,
+          });
+          return { id: (result as any).insertId };
+        }
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin" && ctx.user.tnaRole !== "hr_officer") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.delete(taskCompetencyMappings).where(eq(taskCompetencyMappings.id, input.id));
+        return { success: true };
+      }),
+
+    // AI-assisted: auto-suggest TESDA references for a question based on its text
+    aiSuggest: protectedProcedure
+      .input(z.object({ questionId: z.number(), questionText: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin" && ctx.user.tnaRole !== "hr_officer") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Fetch active TESDA references for context
+        const refs = await db.select({
+          id: tesdaReferences.id,
+          trCode: tesdaReferences.trCode,
+          qualificationTitle: tesdaReferences.qualificationTitle,
+          csUnitCode: tesdaReferences.csUnitCode,
+          csUnitTitle: tesdaReferences.csUnitTitle,
+          competencyLevel: tesdaReferences.competencyLevel,
+        }).from(tesdaReferences).where(eq(tesdaReferences.isActive, true)).limit(100);
+        if (refs.length === 0) return [];
+        const prompt = `You are a TESDA competency mapping expert. Given the following survey question/task, suggest the most relevant TESDA competency units from the provided list.\n\nTask/Question: "${input.questionText}"\n\nAvailable TESDA References:\n${refs.map(r => `ID:${r.id} | ${r.trCode ?? ''} | ${r.qualificationTitle} | ${r.csUnitCode ?? ''} | ${r.csUnitTitle ?? ''} | ${r.competencyLevel ?? ''}`).join('\n')}\n\nReturn a JSON array of up to 3 best matches with: id (number), relevanceScore (0.0-1.0), rationale (string). Only return the JSON array, no other text.`;
+        const aiResponse = await invokeLLM({
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_schema", json_schema: { name: "suggestions", strict: true, schema: { type: "object", properties: { suggestions: { type: "array", items: { type: "object", properties: { id: { type: "number" }, relevanceScore: { type: "number" }, rationale: { type: "string" } }, required: ["id", "relevanceScore", "rationale"], additionalProperties: false } } }, required: ["suggestions"], additionalProperties: false } } },
+        });
+        const content = aiResponse.choices?.[0]?.message?.content ?? "{}";
+        const parsed = JSON.parse(typeof content === "string" ? content : JSON.stringify(content));
+        return (parsed.suggestions ?? []).map((s: any) => ({
+          ...s,
+          reference: refs.find(r => r.id === s.id),
+        }));
+      }),
+  }),
+
   // ─── AI Provider Configuration ──────────────────────────────────────────────
+  // ─── TESDA Reference Library ───────────────────────────────────────────────────────────────
+  tesda: router({
+    list: protectedProcedure
+      .input(z.object({
+        search: z.string().optional(),
+        referenceType: z.enum(["TR", "CS", "Supermarket"]).optional(),
+        competencyLevel: z.string().optional(),
+        industry: z.string().optional(),
+        activeOnly: z.boolean().optional().default(true),
+      }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const conditions = [];
+        if (input.activeOnly) conditions.push(eq(tesdaReferences.isActive, true));
+        if (input.referenceType) conditions.push(eq(tesdaReferences.referenceType, input.referenceType));
+        if (input.competencyLevel) conditions.push(eq(tesdaReferences.competencyLevel, input.competencyLevel as any));
+        if (input.industry) conditions.push(like(tesdaReferences.industry, `%${input.industry}%`));
+        if (input.search) {
+          conditions.push(or(
+            like(tesdaReferences.qualificationTitle, `%${input.search}%`),
+            like(tesdaReferences.trCode, `%${input.search}%`),
+            like(tesdaReferences.csUnitCode, `%${input.search}%`),
+            like(tesdaReferences.csUnitTitle, `%${input.search}%`),
+          ));
+        }
+        const rows = await db.select().from(tesdaReferences)
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(tesdaReferences.referenceType, tesdaReferences.qualificationTitle)
+          .limit(200);
+        return rows;
+      }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [row] = await db.select().from(tesdaReferences).where(eq(tesdaReferences.id, input.id));
+        if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+        return row;
+      }),
+
+    upsert: protectedProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        referenceType: z.enum(["TR", "CS", "Supermarket"]),
+        trCode: z.string().max(50).optional().nullable(),
+        qualificationTitle: z.string().min(1).max(255),
+        csUnitCode: z.string().max(80).optional().nullable(),
+        csUnitTitle: z.string().max(255).optional().nullable(),
+        competencyLevel: z.enum(["NC I", "NC II", "NC III", "NC IV", "COC", "Other"]).optional().nullable(),
+        descriptor: z.string().optional().nullable(),
+        industry: z.string().max(150).optional().nullable(),
+        sector: z.string().max(150).optional().nullable(),
+        isActive: z.boolean().optional().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin" && ctx.user.tnaRole !== "hr_officer") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        if (input.id) {
+          await db.update(tesdaReferences)
+            .set({ ...input, updatedBy: ctx.user.id, id: undefined })
+            .where(eq(tesdaReferences.id, input.id));
+          return { id: input.id };
+        } else {
+          const [result] = await db.insert(tesdaReferences).values({
+            ...input,
+            createdBy: ctx.user.id,
+            updatedBy: ctx.user.id,
+          });
+          return { id: (result as any).insertId };
+        }
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.delete(tesdaReferences).where(eq(tesdaReferences.id, input.id));
+        return { success: true };
+      }),
+
+    toggleActive: protectedProcedure
+      .input(z.object({ id: z.number(), isActive: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin" && ctx.user.tnaRole !== "hr_officer") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.update(tesdaReferences)
+          .set({ isActive: input.isActive, updatedBy: ctx.user.id })
+          .where(eq(tesdaReferences.id, input.id));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Scoring Weights (T1-6) ─────────────────────────────────────────────────
+  scoringWeights: router({
+    get: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const weights = await getScoringWeights();
+        // Return defaults if no record exists yet
+        return weights ?? {
+          id: null,
+          selfWeight: 0.5,
+          supervisorWeight: 0.3,
+          kpiWeight: 0.2,
+          requireSupervisorValidation: false,
+          fallbackToSelfOnly: true,
+          updatedBy: null,
+          createdAt: null,
+          updatedAt: null,
+        };
+      }),
+    update: protectedProcedure
+      .input(
+        z.object({
+          selfWeight: z.number().min(0).max(1),
+          supervisorWeight: z.number().min(0).max(1),
+          kpiWeight: z.number().min(0).max(1),
+          requireSupervisorValidation: z.boolean(),
+          fallbackToSelfOnly: z.boolean(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const total = input.selfWeight + input.supervisorWeight + input.kpiWeight;
+        if (Math.abs(total - 1.0) > 0.001) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `Weights must sum to 1.0 (got ${total.toFixed(3)})` });
+        }
+        await upsertScoringWeights({ ...input, updatedBy: ctx.user.id });
+        return { success: true };
+      }),
+  }),
   aiConfig: router({
     getSettings: protectedProcedure
       .query(async ({ ctx }) => {

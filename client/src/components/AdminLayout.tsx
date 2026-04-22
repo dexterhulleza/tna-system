@@ -35,6 +35,9 @@ import {
   Globe,
   Layers,
   ShieldAlert,
+  Library,
+  Network,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +86,15 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "TNA Engine",
+    collapsible: true,
+    items: [
+      { icon: Library, label: "TESDA Library", path: "/admin/tesda-library", adminOnly: true },
+      { icon: Network, label: "Task Mapping", path: "/admin/task-mapping", adminOnly: true },
+      { icon: SlidersHorizontal, label: "Scoring Weights", path: "/admin/scoring-weights", adminOnly: true },
+    ],
+  },
+  {
     label: "Settings",
     collapsible: true,
     items: [
@@ -101,9 +113,8 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
   const { user, loading, logout } = useAuth();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
+   const [mobileOpen, setMobileOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {
     if (loading) return;
@@ -145,8 +156,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     );
   }
 
-  // Auto-open settings if current path is under settings
-  const isInSettings = ["/admin/questions", "/admin/sectors", "/admin/ai-settings"].some(p =>
+  // Auto-detect which collapsible group the current path belongs to
+  const isInSettings = ["/admin/questions", "/admin/sectors", "/admin/ai-settings", "/admin/audit-logs"].some(p =>
+    location.startsWith(p)
+  );
+  const isInTnaEngine = ["/admin/tesda-library", "/admin/task-mapping", "/admin/scoring-weights"].some(p =>
     location.startsWith(p)
   );
 
@@ -159,15 +173,16 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return (
       <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
         {NAV_GROUPS.map((group) => {
-          const isSettings = group.collapsible;
-          const expanded = isSettings ? (settingsOpen || isInSettings) : true;
+          const isCollapsible = group.collapsible;
+          const autoOpen = group.label === "Settings" ? isInSettings : group.label === "TNA Engine" ? isInTnaEngine : false;
+          const expanded = isCollapsible ? (openGroups[group.label] ?? autoOpen) : true;
 
           return (
             <div key={group.label}>
               {/* Group header */}
-              {isSettings ? (
+              {isCollapsible ? (
                 <button
-                  onClick={() => setSettingsOpen(v => !v)}
+                  onClick={() => setOpenGroups(prev => ({ ...prev, [group.label]: !(prev[group.label] ?? autoOpen) }))}
                   className="flex items-center justify-between w-full px-2 py-1 mb-1 group"
                 >
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 group-hover:text-slate-600 transition-colors">

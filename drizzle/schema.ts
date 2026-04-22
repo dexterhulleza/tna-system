@@ -189,8 +189,14 @@ export const surveyResponses = mysqlTable("survey_responses", {
   surveyId: int("surveyId").notNull().references(() => surveys.id),
   questionId: int("questionId").notNull().references(() => questions.id),
   responseText: text("responseText"),
-  responseValue: float("responseValue"), // for rating/scale
+  responseValue: float("responseValue"), // for rating/scale (self-assessment)
   responseOptions: json("responseOptions").$type<string[]>(), // for checkbox
+  // T1-6: Multi-source scoring fields
+  supervisorScore: float("supervisorScore"),        // supervisor validation score
+  kpiScore: float("kpiScore"),                      // KPI/performance evidence score
+  supervisorNotes: text("supervisorNotes"),          // supervisor comments
+  supervisorValidatedAt: timestamp("supervisorValidatedAt"), // when supervisor submitted
+  supervisorId: int("supervisorId").references(() => users.id), // who validated
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -314,6 +320,25 @@ export type AdminPermission = typeof adminPermissions.$inferSelect;
 export type InsertAdminPermission = typeof adminPermissions.$inferInsert;
 
 // ─── AI Provider Settings ─────────────────────────────────────────────────────
+// ─── Scoring Weights (T1-6) ─────────────────────────────────────────────────
+// Configurable weights for multi-source scoring: self-assessment, supervisor, KPI
+export const scoringWeights = mysqlTable("scoring_weights", {
+  id: int("id").autoincrement().primaryKey(),
+  // Weights must sum to 1.0 (enforced at application layer)
+  selfWeight: float("selfWeight").notNull().default(0.5),       // employee self-assessment
+  supervisorWeight: float("supervisorWeight").notNull().default(0.3), // supervisor validation
+  kpiWeight: float("kpiWeight").notNull().default(0.2),         // KPI/performance evidence
+  // Whether supervisor validation is required before computing weighted score
+  requireSupervisorValidation: boolean("requireSupervisorValidation").notNull().default(false),
+  // Fallback: if supervisor hasn't validated, use self score only
+  fallbackToSelfOnly: boolean("fallbackToSelfOnly").notNull().default(true),
+  updatedBy: int("updatedBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ScoringWeights = typeof scoringWeights.$inferSelect;
+export type InsertScoringWeights = typeof scoringWeights.$inferInsert;
+
 export const aiSettings = mysqlTable("ai_settings", {
   id: int("id").autoincrement().primaryKey(),
   provider: varchar("provider", { length: 50 }).notNull().default("builtin"),
@@ -350,6 +375,35 @@ export const groupAnalysisSections = mysqlTable("group_analysis_sections", {
 export type GroupAnalysisSection = typeof groupAnalysisSections.$inferSelect;
 export type InsertGroupAnalysisSection = typeof groupAnalysisSections.$inferInsert;
 
+// ─── TESDA Reference Library ─────────────────────────────────────────────────
+// Stores TESDA Training Regulations (TR), Competency Standards (CS), and
+// Supermarket micro-credential units for mapping to role competencies.
+export const tesdaReferences = mysqlTable("tesda_references", {
+  id: int("id").autoincrement().primaryKey(),
+  // Classification
+  referenceType: mysqlEnum("referenceType", ["TR", "CS", "Supermarket"]).notNull().default("TR"),
+  // TR / CS identifiers
+  trCode: varchar("trCode", { length: 50 }),           // e.g. "CSS NC II"
+  qualificationTitle: varchar("qualificationTitle", { length: 255 }).notNull(), // e.g. "Computer Systems Servicing NC II"
+  // Competency Standard unit
+  csUnitCode: varchar("csUnitCode", { length: 80 }),   // e.g. "CSS311201"
+  csUnitTitle: varchar("csUnitTitle", { length: 255 }), // e.g. "Install and Configure Computer Systems"
+  competencyLevel: mysqlEnum("competencyLevel", ["NC I", "NC II", "NC III", "NC IV", "COC", "Other"]).default("NC II"),
+  // Descriptor / scope
+  descriptor: text("descriptor"),
+  // Industry / sector tag for filtering
+  industry: varchar("industry", { length: 150 }),
+  sector: varchar("sector", { length: 150 }),
+  // Status
+  isActive: boolean("isActive").notNull().default(true),
+  createdBy: int("createdBy").references(() => users.id),
+  updatedBy: int("updatedBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TesdaReference = typeof tesdaReferences.$inferSelect;
+export type InsertTesdaReference = typeof tesdaReferences.$inferInsert;
+
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
 export const auditLogs = mysqlTable("audit_logs", {
   id: int("id").autoincrement().primaryKey(),
@@ -364,3 +418,25 @@ export const auditLogs = mysqlTable("audit_logs", {
 });
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
+// ─── Task-to-Competency Mappings (T1-5) ──────────────────────────────────────
+// Links survey questions (tasks) to TESDA Reference Library entries (competency units)
+// so AI-generated training plans can cite specific TR/CS codes.
+export const taskCompetencyMappings = mysqlTable("task_competency_mappings", {
+  id: int("id").autoincrement().primaryKey(),
+  // The survey question / task being mapped
+  questionId: int("questionId").notNull().references(() => questions.id, { onDelete: "cascade" }),
+  // The TESDA reference (TR or CS unit) this task maps to
+  tesdaReferenceId: int("tesdaReferenceId").notNull().references(() => tesdaReferences.id, { onDelete: "cascade" }),
+  // How strongly this task relates to the competency unit (0.0–1.0)
+  relevanceScore: float("relevanceScore").default(1.0),
+  // Optional notes explaining the mapping rationale
+  notes: text("notes"),
+  // Whether this mapping was created by AI (auto) or manually by an HR Officer
+  mappingSource: mysqlEnum("mappingSource", ["manual", "ai"]).notNull().default("manual"),
+  createdBy: int("createdBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TaskCompetencyMapping = typeof taskCompetencyMappings.$inferSelect;
+export type InsertTaskCompetencyMapping = typeof taskCompetencyMappings.$inferInsert;

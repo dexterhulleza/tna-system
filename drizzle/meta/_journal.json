@@ -64,6 +64,27 @@
       "when": 1776792943141,
       "tag": "0008_warm_warbird",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1776854993122,
+      "tag": "0009_lowly_gladiator",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1776855347636,
+      "tag": "0010_sturdy_jack_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1776855670504,
+      "tag": "0011_shocking_scarecrow",
+      "breakpoints": true
     }
   ]
 }

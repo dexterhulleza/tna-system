@@ -25,6 +25,9 @@ import AdminResults from "@/pages/admin/AdminResults";
 import SurveyConfiguration from "./pages/admin/SurveyConfiguration";
 import ProfileSetup from "./pages/ProfileSetup";
 import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
+import AdminTesdaLibrary from "./pages/admin/AdminTesdaLibrary";
+import AdminTaskMapping from "./pages/admin/AdminTaskMapping";
+import AdminScoringWeights from "./pages/admin/AdminScoringWeights";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -78,6 +81,10 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       {/* Admin audit logs */}
       <Route path="/admin/audit-logs" component={withAdminLayout(AdminAuditLogs)} />
+      {/* TNA Engine pages (T1-4, T1-5, T1-6) */}
+      <Route path="/admin/tesda-library" component={withAdminLayout(AdminTesdaLibrary)} />
+      <Route path="/admin/task-mapping" component={withAdminLayout(AdminTaskMapping)} />
+      <Route path="/admin/scoring-weights" component={withAdminLayout(AdminScoringWeights)} />
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

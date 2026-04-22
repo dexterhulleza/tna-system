@@ -8,6 +8,7 @@ import {
   questions,
   recommendations,
   reports,
+  scoringWeights,
   sectors,
   skillAreas,
   surveyConfigurations,
@@ -989,4 +990,69 @@ export async function computeGroupSummary(groupId: number) {
     sectorDistribution: sectorCounts,
     primarySector: groupReports[0]?.sector?.name ?? "Multiple Sectors",
   };
+}
+
+// ─── Scoring Weights (T1-6) ───────────────────────────────────────────────────
+export async function getScoringWeights() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(scoringWeights).orderBy(desc(scoringWeights.updatedAt)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertScoringWeights(data: {
+  selfWeight: number;
+  supervisorWeight: number;
+  kpiWeight: number;
+  requireSupervisorValidation: boolean;
+  fallbackToSelfOnly: boolean;
+  updatedBy: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  const existing = await getScoringWeights();
+  if (existing) {
+    await db.update(scoringWeights)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(scoringWeights.id, existing.id));
+    return { ...existing, ...data };
+  } else {
+    const [result] = await db.insert(scoringWeights).values(data);
+    return { id: (result as any).insertId, ...data };
+  }
+}
+
+/**
+ * Compute the weighted score for a single response.
+ * Falls back to self-only if supervisor hasn't validated and fallbackToSelfOnly is true.
+ */
+export function computeWeightedScore(
+  selfScore: number | null | undefined,
+  supervisorScore: number | null | undefined,
+  kpiScore: number | null | undefined,
+  weights: { selfWeight: number; supervisorWeight: number; kpiWeight: number; fallbackToSelfOnly: boolean }
+): number | null {
+  if (selfScore == null) return null;
+  const hasSupervisor = supervisorScore != null;
+  const hasKpi = kpiScore != null;
+  if (!hasSupervisor && !hasKpi) {
+    // Only self score available
+    return selfScore;
+  }
+  if (!hasSupervisor && weights.fallbackToSelfOnly) {
+    // Supervisor not yet validated, fall back to self-only
+    return selfScore;
+  }
+  // Compute weighted average with available sources
+  let totalWeight = weights.selfWeight;
+  let weightedSum = selfScore * weights.selfWeight;
+  if (hasSupervisor) {
+    totalWeight += weights.supervisorWeight;
+    weightedSum += supervisorScore! * weights.supervisorWeight;
+  }
+  if (hasKpi) {
+    totalWeight += weights.kpiWeight;
+    weightedSum += kpiScore! * weights.kpiWeight;
+  }
+  return totalWeight > 0 ? weightedSum / totalWeight : selfScore;
 }
