@@ -42,6 +42,7 @@ import {
   BarChart2,
   ListOrdered,
   UserCheck,
+  BookMarked,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -100,6 +101,7 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: BarChart2, label: "Gap Records", path: "/admin/gap-records", adminOnly: true },
       { icon: ListOrdered, label: "Prioritization", path: "/admin/prioritization", adminOnly: true },
       { icon: UserCheck, label: "Supervisor Validation", path: "/admin/supervisor-validation", adminOnly: true },
+      { icon: BookMarked, label: "Curriculum Blueprints", path: "/admin/curriculum", adminOnly: true },
     ],
   },
   {
@@ -168,7 +170,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const isInSettings = ["/admin/questions", "/admin/sectors", "/admin/ai-settings", "/admin/audit-logs"].some(p =>
     location.startsWith(p)
   );
-  const isInTnaEngine = ["/admin/tesda-library", "/admin/task-mapping", "/admin/scoring-weights", "/admin/target-proficiency", "/admin/gap-records", "/admin/prioritization", "/admin/supervisor-validation"].some(p =>
+  const isInTnaEngine = ["/admin/tesda-library", "/admin/task-mapping", "/admin/scoring-weights", "/admin/target-proficiency", "/admin/gap-records", "/admin/prioritization", "/admin/supervisor-validation", "/admin/curriculum"].some(p =>
     location.startsWith(p)
   );
 

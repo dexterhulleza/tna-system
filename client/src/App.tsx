@@ -32,6 +32,8 @@ import AdminTargetProficiency from "./pages/admin/AdminTargetProficiency";
 import AdminGapRecords from "./pages/admin/AdminGapRecords";
 import AdminPrioritizationMatrix from "./pages/admin/AdminPrioritizationMatrix";
 import AdminSupervisorValidation from "./pages/admin/AdminSupervisorValidation";
+import AdminCurriculumBlueprints from "./pages/admin/AdminCurriculumBlueprints";
+import AdminCurriculumDetail from "./pages/admin/AdminCurriculumDetail";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -94,6 +96,9 @@ function Router() {
       <Route path="/admin/gap-records" component={withAdminLayout(AdminGapRecords)} />
       <Route path="/admin/prioritization" component={withAdminLayout(AdminPrioritizationMatrix)} />
       <Route path="/admin/supervisor-validation" component={withAdminLayout(AdminSupervisorValidation)} />
+      {/* Curriculum Engine pages (T3-1 to T3-4) */}
+      <Route path="/admin/curriculum" component={withAdminLayout(AdminCurriculumBlueprints)} />
+      <Route path="/admin/curriculum/:id" component={withAdminLayout(AdminCurriculumDetail)} />
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

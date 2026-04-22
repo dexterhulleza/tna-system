@@ -531,3 +531,78 @@ export const prioritizationMatrix = mysqlTable("prioritization_matrix", {
 });
 export type PrioritizationMatrix = typeof prioritizationMatrix.$inferSelect;
 export type InsertPrioritizationMatrix = typeof prioritizationMatrix.$inferInsert;
+
+// ─── Curriculum Blueprints (T3-1) ─────────────────────────────────────────────
+// A structured curriculum object replacing free-text training plan narratives.
+// Blueprints are linked to a survey group and contain ordered modules across
+// 4 curriculum layers (Foundation / Core Role / Context / Advancement).
+// Status workflow: Draft → For Review → Approved → Published
+export const curriculumBlueprints = mysqlTable("curriculum_blueprints", {
+  id: int("id").autoincrement().primaryKey(),
+  // Scope — linked to a survey group (one blueprint per group per cycle)
+  groupId: int("groupId").notNull().references(() => surveyGroups.id, { onDelete: "cascade" }),
+  // Metadata
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  targetAudience: varchar("targetAudience", { length: 500 }),
+  // Status workflow
+  status: mysqlEnum("status", ["draft", "for_review", "approved", "published"]).notNull().default("draft"),
+  // T3-3 TESDA alignment
+  alignmentType: mysqlEnum("alignmentType", ["full_tr", "partial_cs", "supermarket", "blended", "none"]).default("none"),
+  alignmentCondition: mysqlEnum("alignmentCondition", ["strong", "partial", "emerging", "blended"]).default("emerging"),
+  alignmentNotes: text("alignmentNotes"),
+  tesdaReferenceId: int("tesdaReferenceId").references(() => tesdaReferences.id, { onDelete: "set null" }),
+  // Review / approval metadata
+  reviewedBy: int("reviewedBy").references(() => users.id),
+  reviewedAt: timestamp("reviewedAt"),
+  approvedBy: int("approvedBy").references(() => users.id),
+  approvedAt: timestamp("approvedAt"),
+  publishedBy: int("publishedBy").references(() => users.id),
+  publishedAt: timestamp("publishedAt"),
+  overrideReason: text("overrideReason"),   // T3-4: reason for any changes to AI-generated content
+  // Generation metadata
+  generatedBy: int("generatedBy").references(() => users.id),
+  generatedAt: timestamp("generatedAt"),
+  modelUsed: varchar("modelUsed", { length: 100 }),
+  isAiGenerated: boolean("isAiGenerated").notNull().default(false),
+  // Versioning
+  version: int("version").notNull().default(1),
+  createdBy: int("createdBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CurriculumBlueprint = typeof curriculumBlueprints.$inferSelect;
+export type InsertCurriculumBlueprint = typeof curriculumBlueprints.$inferInsert;
+
+// ─── Curriculum Modules (T3-1) ────────────────────────────────────────────────
+// Each blueprint contains ordered modules across 4 layers.
+// A module maps to one or more competency gap records and optionally to a TESDA CS unit.
+export const curriculumModules = mysqlTable("curriculum_modules", {
+  id: int("id").autoincrement().primaryKey(),
+  blueprintId: int("blueprintId").notNull().references(() => curriculumBlueprints.id, { onDelete: "cascade" }),
+  // Curriculum layer
+  layer: mysqlEnum("layer", ["foundation", "core_role", "context", "advancement"]).notNull().default("core_role"),
+  // Module content
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  // Competency mapping
+  competencyCategory: varchar("competencyCategory", { length: 100 }),  // maps to question.category
+  tesdaReferenceId: int("tesdaReferenceId").references(() => tesdaReferences.id, { onDelete: "set null" }),
+  // Delivery
+  durationHours: float("durationHours"),
+  modality: mysqlEnum("modality", ["face_to_face", "online", "blended", "on_the_job", "coaching", "self_directed"]).default("blended"),
+  // Prerequisites — JSON array of module IDs that must be completed first
+  prerequisites: json("prerequisites").$type<number[]>().default([]),
+  // Linked gap data
+  targetGapLevel: mysqlEnum("targetGapLevel", ["critical", "high", "moderate", "low"]).default("high"),
+  estimatedAffectedCount: int("estimatedAffectedCount").default(0),
+  // Ordering within the blueprint
+  sortOrder: int("sortOrder").notNull().default(0),
+  // Override tracking (T3-4)
+  isAiGenerated: boolean("isAiGenerated").notNull().default(false),
+  overrideReason: text("overrideReason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CurriculumModule = typeof curriculumModules.$inferSelect;
+export type InsertCurriculumModule = typeof curriculumModules.$inferInsert;

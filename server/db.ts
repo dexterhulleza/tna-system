@@ -5,6 +5,8 @@ import {
   adminPermissions,
   aiSettings,
   competencyGapRecords,
+  curriculumBlueprints,
+  curriculumModules,
   groupAnalysisSections,
   prioritizationMatrix,
   questions,
@@ -18,6 +20,7 @@ import {
   surveyResponses,
   surveys,
   targetProficiencies,
+  tesdaReferences,
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -1417,4 +1420,303 @@ export async function saveSupervisorScores(
       })
       .where(and(eq(surveyResponses.id, s.responseId), eq(surveyResponses.surveyId, surveyId)));
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T3 — Curriculum Engine helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Curriculum Blueprints ────────────────────────────────────────────────────
+
+export async function getCurriculumBlueprintsByGroup(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(curriculumBlueprints)
+    .where(eq(curriculumBlueprints.groupId, groupId))
+    .orderBy(desc(curriculumBlueprints.updatedAt));
+}
+
+export async function getCurriculumBlueprintById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(curriculumBlueprints)
+    .where(eq(curriculumBlueprints.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getAllCurriculumBlueprints() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(curriculumBlueprints)
+    .orderBy(desc(curriculumBlueprints.updatedAt));
+}
+
+export async function upsertCurriculumBlueprint(data: {
+  id?: number;
+  groupId: number;
+  title: string;
+  description?: string | null;
+  targetAudience?: string | null;
+  status?: "draft" | "for_review" | "approved" | "published";
+  alignmentType?: "full_tr" | "partial_cs" | "supermarket" | "blended" | "none";
+  alignmentCondition?: "strong" | "partial" | "emerging" | "blended";
+  alignmentNotes?: string | null;
+  tesdaReferenceId?: number | null;
+  overrideReason?: string | null;
+  generatedBy?: number | null;
+  generatedAt?: Date | null;
+  modelUsed?: string | null;
+  isAiGenerated?: boolean;
+  reviewedBy?: number | null;
+  reviewedAt?: Date | null;
+  approvedBy?: number | null;
+  approvedAt?: Date | null;
+  publishedBy?: number | null;
+  publishedAt?: Date | null;
+  createdBy?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  if (data.id) {
+    await db
+      .update(curriculumBlueprints)
+      .set({
+        title: data.title,
+        description: data.description ?? null,
+        targetAudience: data.targetAudience ?? null,
+        status: data.status,
+        alignmentType: data.alignmentType,
+        alignmentCondition: data.alignmentCondition,
+        alignmentNotes: data.alignmentNotes ?? null,
+        tesdaReferenceId: data.tesdaReferenceId ?? null,
+        overrideReason: data.overrideReason ?? null,
+        generatedBy: data.generatedBy ?? null,
+        generatedAt: data.generatedAt ?? null,
+        modelUsed: data.modelUsed ?? null,
+        isAiGenerated: data.isAiGenerated,
+        reviewedBy: data.reviewedBy ?? null,
+        reviewedAt: data.reviewedAt ?? null,
+        approvedBy: data.approvedBy ?? null,
+        approvedAt: data.approvedAt ?? null,
+        publishedBy: data.publishedBy ?? null,
+        publishedAt: data.publishedAt ?? null,
+      })
+      .where(eq(curriculumBlueprints.id, data.id));
+    return getCurriculumBlueprintById(data.id);
+  }
+  const [result] = await db.insert(curriculumBlueprints).values({
+    groupId: data.groupId,
+    title: data.title,
+    description: data.description ?? null,
+    targetAudience: data.targetAudience ?? null,
+    status: data.status ?? "draft",
+    alignmentType: data.alignmentType ?? "none",
+    alignmentCondition: data.alignmentCondition ?? "emerging",
+    alignmentNotes: data.alignmentNotes ?? null,
+    tesdaReferenceId: data.tesdaReferenceId ?? null,
+    overrideReason: data.overrideReason ?? null,
+    generatedBy: data.generatedBy ?? null,
+    generatedAt: data.generatedAt ?? null,
+    modelUsed: data.modelUsed ?? null,
+    isAiGenerated: data.isAiGenerated ?? false,
+    createdBy: data.createdBy ?? null,
+  });
+  const newId = (result as any).insertId as number;
+  return getCurriculumBlueprintById(newId);
+}
+
+export async function deleteCurriculumBlueprint(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(curriculumBlueprints).where(eq(curriculumBlueprints.id, id));
+}
+
+export async function advanceBlueprintStatus(
+  id: number,
+  newStatus: "for_review" | "approved" | "published",
+  userId: number,
+  overrideReason?: string | null
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const now = new Date();
+  const patch: Record<string, unknown> = { status: newStatus };
+  if (newStatus === "for_review") {
+    patch.reviewedBy = userId;
+    patch.reviewedAt = now;
+  } else if (newStatus === "approved") {
+    patch.approvedBy = userId;
+    patch.approvedAt = now;
+    if (overrideReason) patch.overrideReason = overrideReason;
+  } else if (newStatus === "published") {
+    patch.publishedBy = userId;
+    patch.publishedAt = now;
+  }
+  await db.update(curriculumBlueprints).set(patch as any).where(eq(curriculumBlueprints.id, id));
+  return getCurriculumBlueprintById(id);
+}
+
+// ─── Curriculum Modules ───────────────────────────────────────────────────────
+
+export async function getCurriculumModulesByBlueprint(blueprintId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(curriculumModules)
+    .where(eq(curriculumModules.blueprintId, blueprintId))
+    .orderBy(curriculumModules.sortOrder);
+}
+
+export async function getCurriculumModuleById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(curriculumModules)
+    .where(eq(curriculumModules.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertCurriculumModule(data: {
+  id?: number;
+  blueprintId: number;
+  layer: "foundation" | "core_role" | "context" | "advancement";
+  title: string;
+  description?: string | null;
+  competencyCategory?: string | null;
+  tesdaReferenceId?: number | null;
+  durationHours?: number | null;
+  modality?: "face_to_face" | "online" | "blended" | "on_the_job" | "coaching" | "self_directed";
+  prerequisites?: number[];
+  targetGapLevel?: "critical" | "high" | "moderate" | "low";
+  estimatedAffectedCount?: number;
+  sortOrder?: number;
+  isAiGenerated?: boolean;
+  overrideReason?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const prereqStr = JSON.stringify(data.prerequisites ?? []);
+  if (data.id) {
+    await db
+      .update(curriculumModules)
+      .set({
+        layer: data.layer,
+        title: data.title,
+        description: data.description ?? null,
+        competencyCategory: data.competencyCategory ?? null,
+        tesdaReferenceId: data.tesdaReferenceId ?? null,
+        durationHours: data.durationHours ?? null,
+        modality: data.modality ?? "blended",
+        prerequisites: prereqStr as any,
+        targetGapLevel: data.targetGapLevel ?? "high",
+        estimatedAffectedCount: data.estimatedAffectedCount ?? 0,
+        sortOrder: data.sortOrder ?? 0,
+        isAiGenerated: data.isAiGenerated ?? false,
+        overrideReason: data.overrideReason ?? null,
+      })
+      .where(eq(curriculumModules.id, data.id));
+    return getCurriculumModuleById(data.id);
+  }
+  const [result] = await db.insert(curriculumModules).values({
+    blueprintId: data.blueprintId,
+    layer: data.layer,
+    title: data.title,
+    description: data.description ?? null,
+    competencyCategory: data.competencyCategory ?? null,
+    tesdaReferenceId: data.tesdaReferenceId ?? null,
+    durationHours: data.durationHours ?? null,
+    modality: data.modality ?? "blended",
+    prerequisites: prereqStr as any,
+    targetGapLevel: data.targetGapLevel ?? "high",
+    estimatedAffectedCount: data.estimatedAffectedCount ?? 0,
+    sortOrder: data.sortOrder ?? 0,
+    isAiGenerated: data.isAiGenerated ?? false,
+    overrideReason: data.overrideReason ?? null,
+  });
+  const newId = (result as any).insertId as number;
+  return getCurriculumModuleById(newId);
+}
+
+export async function deleteCurriculumModule(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(curriculumModules).where(eq(curriculumModules.id, id));
+}
+
+export async function reorderCurriculumModules(blueprintId: number, orderedIds: number[]) {
+  const db = await getDb();
+  if (!db) return;
+  for (let i = 0; i < orderedIds.length; i++) {
+    await db
+      .update(curriculumModules)
+      .set({ sortOrder: i })
+      .where(and(eq(curriculumModules.id, orderedIds[i]), eq(curriculumModules.blueprintId, blueprintId)));
+  }
+}
+
+export async function bulkInsertCurriculumModules(
+  blueprintId: number,
+  modules: Array<{
+    layer: "foundation" | "core_role" | "context" | "advancement";
+    title: string;
+    description?: string | null;
+    competencyCategory?: string | null;
+    durationHours?: number | null;
+    modality?: "face_to_face" | "online" | "blended" | "on_the_job" | "coaching" | "self_directed";
+    targetGapLevel?: "critical" | "high" | "moderate" | "low";
+    estimatedAffectedCount?: number;
+    sortOrder: number;
+    isAiGenerated?: boolean;
+  }>
+) {
+  const db = await getDb();
+  if (!db) return;
+  if (modules.length === 0) return;
+  await db.insert(curriculumModules).values(
+    modules.map((m) => ({
+      blueprintId,
+      layer: m.layer,
+      title: m.title,
+      description: m.description ?? null,
+      competencyCategory: m.competencyCategory ?? null,
+      durationHours: m.durationHours ?? null,
+      modality: m.modality ?? "blended",
+      prerequisites: "[]" as any,
+      targetGapLevel: m.targetGapLevel ?? "high",
+      estimatedAffectedCount: m.estimatedAffectedCount ?? 0,
+      sortOrder: m.sortOrder,
+      isAiGenerated: m.isAiGenerated ?? true,
+    }))
+  );
+}
+
+export async function deleteAllModulesForBlueprint(blueprintId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(curriculumModules).where(eq(curriculumModules.blueprintId, blueprintId));
+}
+
+// ─── T3-3 TESDA alignment helper ─────────────────────────────────────────────
+// Compute alignment condition from module count vs. TESDA reference unit count.
+export function computeAlignmentCondition(
+  moduleCount: number,
+  tesdaUnitCount: number,
+  alignmentType: string
+): "strong" | "partial" | "emerging" | "blended" {
+  if (alignmentType === "none") return "emerging";
+  if (alignmentType === "blended") return "blended";
+  const ratio = tesdaUnitCount > 0 ? moduleCount / tesdaUnitCount : 0;
+  if (ratio >= 0.9) return "strong";
+  if (ratio >= 0.6) return "partial";
+  return "emerging";
 }

@@ -78,6 +78,19 @@ import {
   getSurveysForSupervisorValidation,
   getSupervisorValidationProgress,
   saveSupervisorScores,
+  // T3 Curriculum Engine
+  getCurriculumBlueprintsByGroup,
+  getCurriculumBlueprintById,
+  getAllCurriculumBlueprints,
+  upsertCurriculumBlueprint,
+  deleteCurriculumBlueprint,
+  advanceBlueprintStatus,
+  getCurriculumModulesByBlueprint,
+  upsertCurriculumModule,
+  deleteCurriculumModule,
+  reorderCurriculumModules,
+  bulkInsertCurriculumModules,
+  deleteAllModulesForBlueprint,
 } from "./db";
 import { analyzeGaps, generateRecommendations } from "./tnaEngine";
 import {
@@ -2152,6 +2165,264 @@ Requirements:
           input.baseUrl
         );
         return result;
+      }),
+  }),
+
+  // ─── Curriculum Engine (T3) ─────────────────────────────────────────────────
+  curriculum: router({
+    // List all blueprints (admin overview)
+    list: adminProcedure
+      .input(z.object({ groupId: z.number().optional() }))
+      .query(async ({ input }) => {
+        if (input.groupId) return getCurriculumBlueprintsByGroup(input.groupId);
+        return getAllCurriculumBlueprints();
+      }),
+
+    // Get a single blueprint with its modules
+    getById: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const blueprint = await getCurriculumBlueprintById(input.id);
+        if (!blueprint) throw new TRPCError({ code: "NOT_FOUND" });
+        const modules = await getCurriculumModulesByBlueprint(input.id);
+        return { blueprint, modules };
+      }),
+
+    // Create or update a blueprint
+    upsert: adminProcedure
+      .input(
+        z.object({
+          id: z.number().optional(),
+          groupId: z.number(),
+          title: z.string().min(1),
+          description: z.string().optional().nullable(),
+          targetAudience: z.string().optional().nullable(),
+          status: z.enum(["draft", "for_review", "approved", "published"]).optional(),
+          alignmentType: z.enum(["full_tr", "partial_cs", "supermarket", "blended", "none"]).optional(),
+          alignmentCondition: z.enum(["strong", "partial", "emerging", "blended"]).optional(),
+          alignmentNotes: z.string().optional().nullable(),
+          tesdaReferenceId: z.number().optional().nullable(),
+          overrideReason: z.string().optional().nullable(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return upsertCurriculumBlueprint({ ...input, createdBy: ctx.user.id });
+      }),
+
+    // Delete a blueprint (cascades to modules)
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteCurriculumBlueprint(input.id);
+        return { success: true };
+      }),
+
+    // Advance status: draft → for_review → approved → published
+    advanceStatus: adminProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          newStatus: z.enum(["for_review", "approved", "published"]),
+          overrideReason: z.string().optional().nullable(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        return advanceBlueprintStatus(input.id, input.newStatus, ctx.user.id, input.overrideReason);
+      }),
+
+    // Revert to draft (for re-editing after review)
+    revertToDraft: adminProcedure
+      .input(z.object({ id: z.number(), reason: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { curriculumBlueprints: cb } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        await db.update(cb).set({ status: "draft", overrideReason: input.reason ?? null }).where(eq(cb.id, input.id));
+        return getCurriculumBlueprintById(input.id);
+      }),
+
+    // ── Module CRUD ───────────────────────────────────────────────────────────
+    getModules: adminProcedure
+      .input(z.object({ blueprintId: z.number() }))
+      .query(({ input }) => getCurriculumModulesByBlueprint(input.blueprintId)),
+
+    upsertModule: adminProcedure
+      .input(
+        z.object({
+          id: z.number().optional(),
+          blueprintId: z.number(),
+          layer: z.enum(["foundation", "core_role", "context", "advancement"]),
+          title: z.string().min(1),
+          description: z.string().optional().nullable(),
+          competencyCategory: z.string().optional().nullable(),
+          tesdaReferenceId: z.number().optional().nullable(),
+          durationHours: z.number().optional().nullable(),
+          modality: z.enum(["face_to_face", "online", "blended", "on_the_job", "coaching", "self_directed"]).optional(),
+          prerequisites: z.array(z.number()).optional(),
+          targetGapLevel: z.enum(["critical", "high", "moderate", "low"]).optional(),
+          estimatedAffectedCount: z.number().optional(),
+          sortOrder: z.number().optional(),
+          overrideReason: z.string().optional().nullable(),
+        })
+      )
+      .mutation(({ input }) => upsertCurriculumModule(input)),
+
+    deleteModule: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteCurriculumModule(input.id);
+        return { success: true };
+      }),
+
+    reorderModules: adminProcedure
+      .input(z.object({ blueprintId: z.number(), orderedIds: z.array(z.number()) }))
+      .mutation(({ input }) => reorderCurriculumModules(input.blueprintId, input.orderedIds)),
+
+    // ── T3-2 AI-assisted curriculum generation ────────────────────────────────
+    generateBlueprint: adminProcedure
+      .input(
+        z.object({
+          groupId: z.number(),
+          blueprintId: z.number().optional(), // if provided, regenerate into existing blueprint
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        // 1. Gather context: group info, gap records, prioritization matrix
+        const group = await getSurveyGroupById(input.groupId);
+        if (!group) throw new TRPCError({ code: "NOT_FOUND", message: "Survey group not found" });
+
+        const gapSummary = await aggregateGroupGapRecords(input.groupId);
+        const prioritization = await getPrioritizationMatrix(input.groupId);
+
+        const contextData = JSON.stringify({
+          group: { name: group.name, code: group.code, description: group.description },
+          topGaps: gapSummary.slice(0, 20).map((g: any) => ({
+            category: g.category,
+            questionText: g.questionText,
+            avgGapPct: g.avgGapPct,
+            gapLevel: g.gapLevel,
+            affectedCount: g.affectedCount,
+          })),
+          prioritizedNeeds: prioritization.slice(0, 10).map((p: any) => ({
+            label: p.trainingNeedLabel,
+            priorityScore: p.priorityScore,
+            urgency: p.urgencyScore,
+            impact: p.impactScore,
+          })),
+        }, null, 2);
+
+        const systemPrompt = `You are a TESDA-aligned curriculum design specialist. Generate a structured curriculum blueprint in JSON format based on the provided TNA gap data. The blueprint must follow the 4-layer curriculum architecture: Foundation (basic literacy, safety, workplace communication), Core Role (technical competencies directly addressing identified gaps), Context (industry-specific application, regulations, standards), and Advancement (leadership, innovation, career progression).
+
+Return ONLY valid JSON matching this exact schema:
+{
+  "title": "string — descriptive curriculum title",
+  "description": "string — 2-3 sentence overview",
+  "targetAudience": "string — who this curriculum is for",
+  "alignmentType": "full_tr|partial_cs|supermarket|blended|none",
+  "alignmentCondition": "strong|partial|emerging|blended",
+  "alignmentNotes": "string — explanation of TESDA alignment",
+  "modules": [
+    {
+      "layer": "foundation|core_role|context|advancement",
+      "title": "string — module title",
+      "description": "string — what learners will achieve",
+      "competencyCategory": "string — maps to gap category",
+      "durationHours": number,
+      "modality": "face_to_face|online|blended|on_the_job|coaching|self_directed",
+      "targetGapLevel": "critical|high|moderate|low",
+      "estimatedAffectedCount": number,
+      "sortOrder": number
+    }
+  ]
+}`;
+
+        const userPrompt = `Generate a curriculum blueprint for the following survey group and identified competency gaps:\n\n${contextData}\n\nEnsure modules directly address the identified gaps. Order modules from Foundation to Advancement. Include at least 2 modules per layer where gaps exist. Use realistic duration estimates (4-40 hours per module). Return only the JSON object.`;
+
+        let parsed: any;
+        try {
+          const result = await invokeAI({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+          });
+          const raw = typeof result === "string" ? result : (result as any)?.text ?? String(result);
+          // Extract JSON from the response
+          const jsonMatch = raw.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) throw new Error("No JSON found in AI response");
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch (err: any) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `AI generation failed: ${err?.message ?? "Unknown error"}`,
+          });
+        }
+
+        const aiSettings = await getActiveAiSettings();
+        const modelUsed = aiSettings?.model ?? "built-in";
+        const now = new Date();
+
+        // 2. Create or update the blueprint record
+        let blueprintId = input.blueprintId;
+        if (blueprintId) {
+          // Regenerate: update blueprint metadata and delete existing modules
+          await upsertCurriculumBlueprint({
+            id: blueprintId,
+            groupId: input.groupId,
+            title: parsed.title ?? `Curriculum Blueprint — ${group.name}`,
+            description: parsed.description ?? null,
+            targetAudience: parsed.targetAudience ?? null,
+            alignmentType: parsed.alignmentType ?? "none",
+            alignmentCondition: parsed.alignmentCondition ?? "emerging",
+            alignmentNotes: parsed.alignmentNotes ?? null,
+            isAiGenerated: true,
+            generatedBy: ctx.user.id,
+            generatedAt: now,
+            modelUsed,
+          });
+          await deleteAllModulesForBlueprint(blueprintId);
+        } else {
+          const bp = await upsertCurriculumBlueprint({
+            groupId: input.groupId,
+            title: parsed.title ?? `Curriculum Blueprint — ${group.name}`,
+            description: parsed.description ?? null,
+            targetAudience: parsed.targetAudience ?? null,
+            status: "draft",
+            alignmentType: parsed.alignmentType ?? "none",
+            alignmentCondition: parsed.alignmentCondition ?? "emerging",
+            alignmentNotes: parsed.alignmentNotes ?? null,
+            isAiGenerated: true,
+            generatedBy: ctx.user.id,
+            generatedAt: now,
+            modelUsed,
+            createdBy: ctx.user.id,
+          });
+          blueprintId = bp!.id;
+        }
+
+        // 3. Insert modules
+        const modulesRaw: any[] = Array.isArray(parsed.modules) ? parsed.modules : [];
+        const validLayers = ["foundation", "core_role", "context", "advancement"] as const;
+        const validModalities = ["face_to_face", "online", "blended", "on_the_job", "coaching", "self_directed"] as const;
+        const validGapLevels = ["critical", "high", "moderate", "low"] as const;
+        const modules = modulesRaw.map((m: any, i: number) => ({
+          layer: validLayers.includes(m.layer) ? m.layer : "core_role" as const,
+          title: String(m.title ?? `Module ${i + 1}`),
+          description: m.description ?? null,
+          competencyCategory: m.competencyCategory ?? null,
+          durationHours: typeof m.durationHours === "number" ? m.durationHours : null,
+          modality: validModalities.includes(m.modality) ? m.modality : "blended" as const,
+          targetGapLevel: validGapLevels.includes(m.targetGapLevel) ? m.targetGapLevel : "high" as const,
+          estimatedAffectedCount: typeof m.estimatedAffectedCount === "number" ? m.estimatedAffectedCount : 0,
+          sortOrder: typeof m.sortOrder === "number" ? m.sortOrder : i,
+          isAiGenerated: true,
+        }));
+        await bulkInsertCurriculumModules(blueprintId!, modules);
+
+        const blueprint = await getCurriculumBlueprintById(blueprintId!);
+        const savedModules = await getCurriculumModulesByBlueprint(blueprintId!);
+        return { blueprint, modules: savedModules };
       }),
   }),
 });

@@ -389,3 +389,17 @@
 - [x] surveys.complete updated — resolves target proficiencies, applies scoring weights, persists gap records on completion
 - [x] AdminLayout.tsx updated — 4 new sidebar links under TNA Engine group
 - [x] App.tsx updated — 4 new routes registered
+
+## Tier 3 — Curriculum Engine (Completed)
+- [x] T3-1: Curriculum Blueprint object — DB tables (curriculum_blueprints, curriculum_modules), CRUD procedures, list page, detail page with module editor
+- [x] T3-2: AI-assisted curriculum generation — generateBlueprint procedure using gap records + prioritization data, 4-layer structured output
+- [x] T3-3: TESDA alignment indicator — alignmentType (full_tr/partial_cs/supermarket/blended/none) + alignmentCondition (strong/partial/emerging/blended) on blueprint, editable alignment panel in detail page
+- [x] T3-4: Review and approval workflow — Draft → For Review → Approved → Published status lifecycle, advance/revert controls, override reason tracking
+- [x] Sidebar: Curriculum Blueprints link added to TNA Engine group in AdminLayout
+
+## Tier 3 — Curriculum Engine (Completed Apr 22 2026)
+- [x] T3-1: Curriculum Blueprint object — DB tables (curriculum_blueprints, curriculum_modules), CRUD procedures, list page, detail page with module editor
+- [x] T3-2: AI-assisted curriculum generation — generateBlueprint procedure using gap records + prioritization data, 4-layer structured output
+- [x] T3-3: TESDA alignment indicator — alignmentType + alignmentCondition fields, editable alignment panel in detail page
+- [x] T3-4: Review and approval workflow — Draft → For Review → Approved → Published lifecycle, advance/revert controls
+- [x] Sidebar: Curriculum Blueprints link added to TNA Engine group in AdminLayout
