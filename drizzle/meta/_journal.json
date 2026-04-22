@@ -99,6 +99,13 @@
       "when": 1776859307646,
       "tag": "0013_soft_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1776860194501,
+      "tag": "0014_strong_guardian",
+      "breakpoints": true
     }
   ]
 }

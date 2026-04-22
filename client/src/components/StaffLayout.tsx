@@ -24,6 +24,7 @@ import {
   Home,
   Clock,
   User,
+  Route,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: ClipboardList, label: "My Assessment", path: "/survey/start" },
+  { icon: Route, label: "My Learning Path", path: "/dashboard/my-path" },
   { icon: User, label: "Profile", path: "/profile-setup" },
 ];
 

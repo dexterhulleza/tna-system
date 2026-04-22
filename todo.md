@@ -403,3 +403,12 @@
 - [x] T3-3: TESDA alignment indicator — alignmentType + alignmentCondition fields, editable alignment panel in detail page
 - [x] T3-4: Review and approval workflow — Draft → For Review → Approved → Published lifecycle, advance/revert controls
 - [x] Sidebar: Curriculum Blueprints link added to TNA Engine group in AdminLayout
+
+## Tier 4 — Learning Path Engine (Completed Apr 22, 2026)
+- [x] T4-1: learning_paths and learning_path_steps DB tables + migration (0014)
+- [x] T4-2: AI-assisted path generation via learningPaths.generatePath procedure
+- [x] T4-3: Staff My Learning Path page (/dashboard/my-path) with step progress tracking
+- [x] T4-4: Admin Learning Paths management page (/admin/learning-paths) with assign/archive/exempt
+- [x] StaffLayout: My Learning Path nav item added
+- [x] AdminLayout: Learning Paths nav item added to TNA Engine group
+- [x] App.tsx: /admin/learning-paths and /dashboard/my-path routes registered

@@ -606,3 +606,103 @@ export const curriculumModules = mysqlTable("curriculum_modules", {
 });
 export type CurriculumModule = typeof curriculumModules.$inferSelect;
 export type InsertCurriculumModule = typeof curriculumModules.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T4 — Learning Path Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Learning Paths (T4-1) ────────────────────────────────────────────────────
+// One path per respondent (or cohort). Generated from gap records + curriculum blueprint.
+export const learningPaths = mysqlTable("learning_paths", {
+  id: int("id").autoincrement().primaryKey(),
+  // Owner
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  groupId: int("groupId").references(() => surveyGroups.id, { onDelete: "set null" }),
+  blueprintId: int("blueprintId").references(() => curriculumBlueprints.id, { onDelete: "set null" }),
+  // Path metadata
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  pathType: mysqlEnum("pathType", [
+    "entry",
+    "compliance",
+    "performance_recovery",
+    "progression",
+    "cross_skilling",
+  ]).notNull().default("progression"),
+  // Status lifecycle: draft → assigned → in_progress → completed → archived
+  status: mysqlEnum("status", [
+    "draft",
+    "assigned",
+    "in_progress",
+    "completed",
+    "archived",
+  ]).notNull().default("draft"),
+  // Completion rule
+  completionRule: mysqlEnum("completionRule", [
+    "all_required",
+    "minimum_percentage",
+    "milestone_based",
+  ]).notNull().default("all_required"),
+  completionThresholdPct: int("completionThresholdPct").default(80), // used when rule = minimum_percentage
+  // Dates
+  targetCompletionDate: timestamp("targetCompletionDate"),
+  assignedAt: timestamp("assignedAt"),
+  assignedBy: int("assignedBy").references(() => users.id, { onDelete: "set null" }),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  // AI generation metadata
+  isAiGenerated: boolean("isAiGenerated").notNull().default(false),
+  generatedAt: timestamp("generatedAt"),
+  modelUsed: varchar("modelUsed", { length: 100 }),
+  // Override tracking
+  overrideReason: text("overrideReason"),
+  createdBy: int("createdBy").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LearningPath = typeof learningPaths.$inferSelect;
+export type InsertLearningPath = typeof learningPaths.$inferInsert;
+
+// ─── Learning Path Steps (T4-1) ───────────────────────────────────────────────
+// Each step maps to a curriculum module (or is a standalone intervention).
+export const learningPathSteps = mysqlTable("learning_path_steps", {
+  id: int("id").autoincrement().primaryKey(),
+  pathId: int("pathId").notNull().references(() => learningPaths.id, { onDelete: "cascade" }),
+  moduleId: int("moduleId").references(() => curriculumModules.id, { onDelete: "set null" }),
+  // Step content (may be copied from module or standalone)
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  layer: mysqlEnum("layer", ["foundation", "core_role", "context", "advancement"]).notNull().default("core_role"),
+  modality: mysqlEnum("modality", ["face_to_face", "online", "blended", "on_the_job", "coaching", "self_directed"]).default("blended"),
+  durationHours: float("durationHours"),
+  competencyCategory: varchar("competencyCategory", { length: 100 }),
+  targetGapLevel: mysqlEnum("targetGapLevel", ["critical", "high", "moderate", "low"]).default("high"),
+  // Sequencing
+  sortOrder: int("sortOrder").notNull().default(0),
+  isRequired: boolean("isRequired").notNull().default(true),
+  // Exemption
+  isExempted: boolean("isExempted").notNull().default(false),
+  exemptionReason: text("exemptionReason"),
+  exemptedBy: int("exemptedBy").references(() => users.id, { onDelete: "set null" }),
+  exemptedAt: timestamp("exemptedAt"),
+  // Progress tracking (T4-4)
+  progressStatus: mysqlEnum("progressStatus", [
+    "not_started",
+    "in_progress",
+    "completed",
+    "exempted",
+  ]).notNull().default("not_started"),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  completionNotes: text("completionNotes"),
+  completionEvidence: varchar("completionEvidence", { length: 1000 }), // URL or reference
+  // Milestone flag
+  isMilestone: boolean("isMilestone").notNull().default(false),
+  milestoneLabel: varchar("milestoneLabel", { length: 200 }),
+  // AI generation metadata
+  isAiGenerated: boolean("isAiGenerated").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LearningPathStep = typeof learningPathSteps.$inferSelect;
+export type InsertLearningPathStep = typeof learningPathSteps.$inferInsert;

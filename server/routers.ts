@@ -91,6 +91,19 @@ import {
   reorderCurriculumModules,
   bulkInsertCurriculumModules,
   deleteAllModulesForBlueprint,
+  // T4 Learning Path Engine
+  createLearningPath,
+  getLearningPathById,
+  getLearningPathsByUser,
+  listAllLearningPaths,
+  updateLearningPath,
+  deleteLearningPath,
+  createLearningPathStep,
+  getStepsForPath,
+  updateLearningPathStep,
+  deleteLearningPathStep,
+  deleteAllStepsForPath,
+  computePathProgress,
 } from "./db";
 import { analyzeGaps, generateRecommendations } from "./tnaEngine";
 import {
@@ -2423,6 +2436,393 @@ Return ONLY valid JSON matching this exact schema:
         const blueprint = await getCurriculumBlueprintById(blueprintId!);
         const savedModules = await getCurriculumModulesByBlueprint(blueprintId!);
         return { blueprint, modules: savedModules };
+      }),
+  }),
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // T4 — Learning Path Engine
+  // ═══════════════════════════════════════════════════════════════════════
+  learningPaths: router({
+    // List all paths (admin/HR view)
+    list: adminProcedure
+      .input(z.object({
+        groupId: z.number().optional(),
+        status: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        const paths = await listAllLearningPaths(input);
+        // Attach step progress for each path
+        const result = await Promise.all(paths.map(async (p) => {
+          const steps = await getStepsForPath(p.id);
+          const progress = computePathProgress(steps);
+          return { ...p, stepCount: steps.length, progress };
+        }));
+        return result;
+      }),
+
+    // Get a single path with its steps
+    getById: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const path = await getLearningPathById(input.id);
+        if (!path) throw new TRPCError({ code: "NOT_FOUND" });
+        const steps = await getStepsForPath(input.id);
+        const progress = computePathProgress(steps);
+        return { ...path, steps, progress };
+      }),
+
+    // Staff: get my own paths
+    myPaths: protectedProcedure.query(async ({ ctx }) => {
+      const paths = await getLearningPathsByUser(ctx.user.id);
+      const result = await Promise.all(paths.map(async (p) => {
+        const steps = await getStepsForPath(p.id);
+        const progress = computePathProgress(steps);
+        return { ...p, steps, progress };
+      }));
+      return result;
+    }),
+
+    // Create a path manually (admin)
+    create: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+        groupId: z.number().optional(),
+        blueprintId: z.number().optional(),
+        title: z.string().min(1),
+        description: z.string().optional(),
+        pathType: z.enum(["entry", "compliance", "performance_recovery", "progression", "cross_skilling"]).default("progression"),
+        completionRule: z.enum(["all_required", "minimum_percentage", "milestone_based"]).default("all_required"),
+        completionThresholdPct: z.number().min(0).max(100).default(80),
+        targetCompletionDate: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await createLearningPath({
+          userId: input.userId,
+          groupId: input.groupId,
+          blueprintId: input.blueprintId,
+          title: input.title,
+          description: input.description,
+          pathType: input.pathType,
+          completionRule: input.completionRule,
+          completionThresholdPct: input.completionThresholdPct,
+          targetCompletionDate: input.targetCompletionDate ? new Date(input.targetCompletionDate) : null,
+          createdBy: ctx.user.id,
+        });
+        return { id };
+      }),
+
+    // Update path metadata
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().optional(),
+        description: z.string().nullable().optional(),
+        pathType: z.enum(["entry", "compliance", "performance_recovery", "progression", "cross_skilling"]).optional(),
+        completionRule: z.enum(["all_required", "minimum_percentage", "milestone_based"]).optional(),
+        completionThresholdPct: z.number().min(0).max(100).optional(),
+        targetCompletionDate: z.string().nullable().optional(),
+        overrideReason: z.string().nullable().optional(),
+        blueprintId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateLearningPath(id, {
+          ...data,
+          targetCompletionDate: data.targetCompletionDate ? new Date(data.targetCompletionDate) : data.targetCompletionDate === null ? null : undefined,
+        });
+        return { success: true };
+      }),
+
+    // Assign path to user (status: draft → assigned)
+    assign: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        targetCompletionDate: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await updateLearningPath(input.id, {
+          status: "assigned",
+          assignedAt: new Date(),
+          assignedBy: ctx.user.id,
+          targetCompletionDate: input.targetCompletionDate ? new Date(input.targetCompletionDate) : undefined,
+        });
+        return { success: true };
+      }),
+
+    // Archive a path
+    archive: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await updateLearningPath(input.id, { status: "archived" });
+        return { success: true };
+      }),
+
+    // Delete a path
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteLearningPath(input.id);
+        return { success: true };
+      }),
+
+    // ── Steps ────────────────────────────────────────────────────────────
+    addStep: adminProcedure
+      .input(z.object({
+        pathId: z.number(),
+        moduleId: z.number().optional(),
+        title: z.string().min(1),
+        description: z.string().optional(),
+        layer: z.enum(["foundation", "core_role", "context", "advancement"]).default("core_role"),
+        modality: z.enum(["face_to_face", "online", "blended", "on_the_job", "coaching", "self_directed"]).default("blended"),
+        durationHours: z.number().optional(),
+        competencyCategory: z.string().optional(),
+        targetGapLevel: z.enum(["critical", "high", "moderate", "low"]).default("high"),
+        sortOrder: z.number().default(0),
+        isRequired: z.boolean().default(true),
+        isMilestone: z.boolean().default(false),
+        milestoneLabel: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const id = await createLearningPathStep(input);
+        return { id };
+      }),
+
+    updateStep: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().optional(),
+        description: z.string().nullable().optional(),
+        layer: z.enum(["foundation", "core_role", "context", "advancement"]).optional(),
+        modality: z.enum(["face_to_face", "online", "blended", "on_the_job", "coaching", "self_directed"]).optional(),
+        durationHours: z.number().nullable().optional(),
+        competencyCategory: z.string().nullable().optional(),
+        targetGapLevel: z.enum(["critical", "high", "moderate", "low"]).optional(),
+        sortOrder: z.number().optional(),
+        isRequired: z.boolean().optional(),
+        isMilestone: z.boolean().optional(),
+        milestoneLabel: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateLearningPathStep(id, data);
+        return { success: true };
+      }),
+
+    deleteStep: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteLearningPathStep(input.id);
+        return { success: true };
+      }),
+
+    // ── Progress tracking (T4-4) ─────────────────────────────────────────
+    // Staff: update their own step progress
+    updateStepProgress: protectedProcedure
+      .input(z.object({
+        stepId: z.number(),
+        progressStatus: z.enum(["not_started", "in_progress", "completed", "exempted"]),
+        completionNotes: z.string().optional(),
+        completionEvidence: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Verify the step belongs to a path owned by this user
+        const steps = await getStepsForPath(0); // We'll do a direct lookup
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { learningPathSteps: lps, learningPaths: lp } = await import("../drizzle/schema");
+        const { eq, and } = await import("drizzle-orm");
+        const [stepRow] = await db
+          .select({ pathId: lps.pathId })
+          .from(lps)
+          .where(eq(lps.id, input.stepId));
+        if (!stepRow) throw new TRPCError({ code: "NOT_FOUND" });
+        const [pathRow] = await db
+          .select({ userId: lp.userId })
+          .from(lp)
+          .where(eq(lp.id, stepRow.pathId));
+        if (!pathRow || pathRow.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+        const now = new Date();
+        await updateLearningPathStep(input.stepId, {
+          progressStatus: input.progressStatus,
+          completionNotes: input.completionNotes,
+          completionEvidence: input.completionEvidence,
+          startedAt: input.progressStatus === "in_progress" ? now : undefined,
+          completedAt: input.progressStatus === "completed" ? now : undefined,
+        });
+        // Auto-update path status based on progress
+        const allSteps = await getStepsForPath(stepRow.pathId);
+        const progress = computePathProgress(allSteps);
+        const path = await getLearningPathById(stepRow.pathId);
+        if (path) {
+          if (progress === 100 && path.status !== "completed") {
+            await updateLearningPath(stepRow.pathId, { status: "completed", completedAt: now });
+          } else if (progress > 0 && path.status === "assigned") {
+            await updateLearningPath(stepRow.pathId, { status: "in_progress", startedAt: now });
+          }
+        }
+        return { success: true, progress };
+      }),
+
+    // Admin: exempt a step for a user
+    exemptStep: adminProcedure
+      .input(z.object({
+        stepId: z.number(),
+        exemptionReason: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await updateLearningPathStep(input.stepId, {
+          isExempted: true,
+          exemptionReason: input.exemptionReason,
+          exemptedBy: ctx.user.id,
+          exemptedAt: new Date(),
+          progressStatus: "exempted",
+        });
+        return { success: true };
+      }),
+
+    // ── T4-2: AI-assisted path generation ───────────────────────────────
+    generatePath: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+        groupId: z.number().optional(),
+        blueprintId: z.number().optional(),
+        pathType: z.enum(["entry", "compliance", "performance_recovery", "progression", "cross_skilling"]).default("progression"),
+        targetCompletionDate: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Gather context: gap records for this user, blueprint modules, role info
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { competencyGapRecords: cgr, users: usersT, learningPaths: lp } = await import("../drizzle/schema");
+        const { eq, and, desc } = await import("drizzle-orm");
+
+        // Get user info
+        const userInfo = await (await import("./db")).getUserById(input.userId);
+        if (!userInfo) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+
+        // Get gap records for this user (via their latest report)
+        const userReports = await (await import("./db")).getUserReports(input.userId);
+        const latestReport = userReports[0];
+        const gapRecords = latestReport
+          ? await (await import("./db")).getCompetencyGapRecordsByReport(latestReport.report.id)
+          : [];
+
+        // Get blueprint modules if blueprintId provided
+        let blueprintModules: any[] = [];
+        let blueprintTitle = "";
+        if (input.blueprintId) {
+          const bp = await getCurriculumBlueprintById(input.blueprintId);
+          blueprintTitle = bp?.title ?? "";
+          blueprintModules = await getCurriculumModulesByBlueprint(input.blueprintId);
+        }
+
+        // Build AI prompt
+        const gapSummary = gapRecords
+          .filter((r: any) => r.gapSeverity === "critical" || r.gapSeverity === "high")
+          .slice(0, 10)
+          .map((r: any) => `- ${r.questionText ?? "Question"}: actual=${r.actualScore}, target=${r.targetScore}, gap=${r.gapScore} (${r.gapSeverity})`)
+          .join("\n");
+
+        const moduleList = blueprintModules
+          .map((m: any, i: number) => `${i + 1}. [${m.layer}] ${m.title} (${m.durationHours ?? "?"} hrs, ${m.modality})`)
+          .join("\n");
+
+        const prompt = `You are a learning path designer for a Training Needs Analysis system.
+
+Employee: ${userInfo.name ?? "Unknown"}
+Role: ${userInfo.jobTitle ?? userInfo.tnaRole ?? "Staff"}
+Path Type: ${input.pathType.replace(/_/g, " ")}
+
+Top Competency Gaps:
+${gapSummary || "No gap records available — use general progression steps."}
+
+Curriculum Blueprint: ${blueprintTitle || "Not specified"}
+Available Modules:
+${moduleList || "No blueprint modules — create standalone steps."}
+
+Generate a sequenced learning path with 4–8 steps. Apply these rules:
+1. Foundation steps first, then core role, then context, then advancement.
+2. Steps addressing critical/high gaps come before moderate/low gaps.
+3. If blueprint modules are available, map steps to them.
+4. Each step must have a clear, actionable title.
+
+Return ONLY valid JSON in this exact format:
+{
+  "title": "string (path title for this employee)",
+  "description": "string (1-2 sentence rationale)",
+  "steps": [
+    {
+      "title": "string",
+      "description": "string",
+      "layer": "foundation|core_role|context|advancement",
+      "modality": "face_to_face|online|blended|on_the_job|coaching|self_directed",
+      "durationHours": number,
+      "competencyCategory": "string or null",
+      "targetGapLevel": "critical|high|moderate|low",
+      "isRequired": true,
+      "isMilestone": false,
+      "sortOrder": number
+    }
+  ]
+}`;
+
+        const aiResult = await invokeAI({
+          messages: [
+            { role: "system", content: "You are a learning path designer. Always respond with valid JSON only." },
+            { role: "user", content: prompt },
+          ],
+           response_format: { type: "json_schema", json_schema: { name: "learning_path", strict: true, schema: { type: "object", properties: { title: { type: "string" }, description: { type: "string" }, steps: { type: "array", items: { type: "object", properties: { title: { type: "string" }, description: { type: "string" }, layer: { type: "string" }, modality: { type: "string" }, durationHours: { type: "number" }, competencyCategory: { type: "string" }, targetGapLevel: { type: "string" }, isRequired: { type: "boolean" }, isMilestone: { type: "boolean" }, sortOrder: { type: "number" } }, required: ["title", "description", "layer", "modality", "durationHours", "competencyCategory", "targetGapLevel", "isRequired", "isMilestone", "sortOrder"], additionalProperties: false } } }, required: ["title", "description", "steps"], additionalProperties: false } } },
+        });
+        const raw = typeof aiResult === "string" ? aiResult : "{}";
+        let parsed: any;
+        try { parsed = JSON.parse(raw); } catch { parsed = { title: "Generated Learning Path", steps: [] }; }
+
+        const pathTitle = parsed.title ?? `Learning Path — ${userInfo.name ?? "Staff"}`;
+        const pathDescription = parsed.description ?? null;
+        const rawSteps: any[] = Array.isArray(parsed.steps) ? parsed.steps : [];
+
+        // Create the path record
+        const validLayers = ["foundation", "core_role", "context", "advancement"];
+        const validModalities = ["face_to_face", "online", "blended", "on_the_job", "coaching", "self_directed"];
+        const validGapLevels = ["critical", "high", "moderate", "low"];
+
+        const pathId = await createLearningPath({
+          userId: input.userId,
+          groupId: input.groupId,
+          blueprintId: input.blueprintId,
+          title: pathTitle,
+          description: pathDescription,
+          pathType: input.pathType,
+          isAiGenerated: true,
+          generatedAt: new Date(),
+          targetCompletionDate: input.targetCompletionDate ? new Date(input.targetCompletionDate) : null,
+          createdBy: ctx.user.id,
+        });
+
+        // Create steps
+        const steps = rawSteps.map((s: any, i: number) => ({
+          pathId,
+          title: typeof s.title === "string" ? s.title : `Step ${i + 1}`,
+          description: typeof s.description === "string" ? s.description : null,
+          layer: validLayers.includes(s.layer) ? s.layer : "core_role" as const,
+          modality: validModalities.includes(s.modality) ? s.modality : "blended" as const,
+          durationHours: typeof s.durationHours === "number" ? s.durationHours : null,
+          competencyCategory: typeof s.competencyCategory === "string" ? s.competencyCategory : null,
+          targetGapLevel: validGapLevels.includes(s.targetGapLevel) ? s.targetGapLevel : "high" as const,
+          sortOrder: typeof s.sortOrder === "number" ? s.sortOrder : i,
+          isRequired: s.isRequired !== false,
+          isMilestone: s.isMilestone === true,
+          milestoneLabel: typeof s.milestoneLabel === "string" ? s.milestoneLabel : null,
+          isAiGenerated: true,
+        }));
+
+        for (const step of steps) {
+          await createLearningPathStep(step);
+        }
+
+        const savedPath = await getLearningPathById(pathId);
+        const savedSteps = await getStepsForPath(pathId);
+        return { path: savedPath, steps: savedSteps };
       }),
   }),
 });

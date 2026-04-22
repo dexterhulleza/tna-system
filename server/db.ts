@@ -7,6 +7,8 @@ import {
   competencyGapRecords,
   curriculumBlueprints,
   curriculumModules,
+  learningPaths,
+  learningPathSteps,
   groupAnalysisSections,
   prioritizationMatrix,
   questions,
@@ -1719,4 +1721,206 @@ export function computeAlignmentCondition(
   if (ratio >= 0.9) return "strong";
   if (ratio >= 0.6) return "partial";
   return "emerging";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T4 — Learning Path Engine helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Learning Path CRUD ───────────────────────────────────────────────────────
+export async function createLearningPath(data: {
+  userId: number;
+  groupId?: number | null;
+  blueprintId?: number | null;
+  title: string;
+  description?: string | null;
+  pathType?: "entry" | "compliance" | "performance_recovery" | "progression" | "cross_skilling";
+  completionRule?: "all_required" | "minimum_percentage" | "milestone_based";
+  completionThresholdPct?: number;
+  targetCompletionDate?: Date | null;
+  isAiGenerated?: boolean;
+  generatedAt?: Date | null;
+  modelUsed?: string | null;
+  createdBy?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(learningPaths).values({
+    userId: data.userId,
+    groupId: data.groupId ?? null,
+    blueprintId: data.blueprintId ?? null,
+    title: data.title,
+    description: data.description ?? null,
+    pathType: data.pathType ?? "progression",
+    status: "draft",
+    completionRule: data.completionRule ?? "all_required",
+    completionThresholdPct: data.completionThresholdPct ?? 80,
+    targetCompletionDate: data.targetCompletionDate ?? null,
+    isAiGenerated: data.isAiGenerated ?? false,
+    generatedAt: data.generatedAt ?? null,
+    modelUsed: data.modelUsed ?? null,
+    createdBy: data.createdBy ?? null,
+  });
+  return (result as any).insertId as number;
+}
+
+export async function getLearningPathById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const [path] = await db.select().from(learningPaths).where(eq(learningPaths.id, id));
+  return path ?? null;
+}
+
+export async function getLearningPathsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(learningPaths)
+    .where(and(eq(learningPaths.userId, userId), sql`${learningPaths.status} != 'archived'`))
+    .orderBy(desc(learningPaths.updatedAt));
+}
+
+export async function getLearningPathsByGroup(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(learningPaths)
+    .where(eq(learningPaths.groupId, groupId))
+    .orderBy(desc(learningPaths.updatedAt));
+}
+
+export async function listAllLearningPaths(opts?: { groupId?: number; status?: string }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (opts?.groupId) conditions.push(eq(learningPaths.groupId, opts.groupId));
+  if (opts?.status) conditions.push(eq(learningPaths.status, opts.status as any));
+  return db
+    .select()
+    .from(learningPaths)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(learningPaths.updatedAt));
+}
+
+export async function updateLearningPath(id: number, data: Partial<{
+  title: string;
+  description: string | null;
+  pathType: "entry" | "compliance" | "performance_recovery" | "progression" | "cross_skilling";
+  status: "draft" | "assigned" | "in_progress" | "completed" | "archived";
+  completionRule: "all_required" | "minimum_percentage" | "milestone_based";
+  completionThresholdPct: number;
+  targetCompletionDate: Date | null;
+  assignedAt: Date | null;
+  assignedBy: number | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  overrideReason: string | null;
+  blueprintId: number | null;
+}>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(learningPaths).set(data).where(eq(learningPaths.id, id));
+}
+
+export async function deleteLearningPath(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(learningPaths).where(eq(learningPaths.id, id));
+}
+
+// ─── Learning Path Steps CRUD ─────────────────────────────────────────────────
+export async function createLearningPathStep(data: {
+  pathId: number;
+  moduleId?: number | null;
+  title: string;
+  description?: string | null;
+  layer?: "foundation" | "core_role" | "context" | "advancement";
+  modality?: "face_to_face" | "online" | "blended" | "on_the_job" | "coaching" | "self_directed";
+  durationHours?: number | null;
+  competencyCategory?: string | null;
+  targetGapLevel?: "critical" | "high" | "moderate" | "low";
+  sortOrder?: number;
+  isRequired?: boolean;
+  isMilestone?: boolean;
+  milestoneLabel?: string | null;
+  isAiGenerated?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(learningPathSteps).values({
+    pathId: data.pathId,
+    moduleId: data.moduleId ?? null,
+    title: data.title,
+    description: data.description ?? null,
+    layer: data.layer ?? "core_role",
+    modality: data.modality ?? "blended",
+    durationHours: data.durationHours ?? null,
+    competencyCategory: data.competencyCategory ?? null,
+    targetGapLevel: data.targetGapLevel ?? "high",
+    sortOrder: data.sortOrder ?? 0,
+    isRequired: data.isRequired ?? true,
+    isMilestone: data.isMilestone ?? false,
+    milestoneLabel: data.milestoneLabel ?? null,
+    isAiGenerated: data.isAiGenerated ?? false,
+  });
+  return (result as any).insertId as number;
+}
+
+export async function getStepsForPath(pathId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(learningPathSteps)
+    .where(eq(learningPathSteps.pathId, pathId))
+    .orderBy(learningPathSteps.sortOrder);
+}
+
+export async function updateLearningPathStep(id: number, data: Partial<{
+  title: string;
+  description: string | null;
+  layer: "foundation" | "core_role" | "context" | "advancement";
+  modality: "face_to_face" | "online" | "blended" | "on_the_job" | "coaching" | "self_directed";
+  durationHours: number | null;
+  competencyCategory: string | null;
+  targetGapLevel: "critical" | "high" | "moderate" | "low";
+  sortOrder: number;
+  isRequired: boolean;
+  isExempted: boolean;
+  exemptionReason: string | null;
+  exemptedBy: number | null;
+  exemptedAt: Date | null;
+  progressStatus: "not_started" | "in_progress" | "completed" | "exempted";
+  startedAt: Date | null;
+  completedAt: Date | null;
+  completionNotes: string | null;
+  completionEvidence: string | null;
+  isMilestone: boolean;
+  milestoneLabel: string | null;
+}>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(learningPathSteps).set(data).where(eq(learningPathSteps.id, id));
+}
+
+export async function deleteLearningPathStep(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(learningPathSteps).where(eq(learningPathSteps.id, id));
+}
+
+export async function deleteAllStepsForPath(pathId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(learningPathSteps).where(eq(learningPathSteps.pathId, pathId));
+}
+
+// ─── Progress computation ─────────────────────────────────────────────────────
+export function computePathProgress(steps: { progressStatus: string; isRequired: boolean; isExempted: boolean }[]) {
+  const required = steps.filter(s => s.isRequired && !s.isExempted);
+  if (required.length === 0) return 100;
+  const done = required.filter(s => s.progressStatus === "completed" || s.progressStatus === "exempted").length;
+  return Math.round((done / required.length) * 100);
 }
