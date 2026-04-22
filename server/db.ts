@@ -9,6 +9,9 @@ import {
   curriculumModules,
   learningPaths,
   learningPathSteps,
+  microCredentialRecords,
+  tnaCampaigns,
+  performanceEvidence,
   groupAnalysisSections,
   prioritizationMatrix,
   questions,
@@ -1923,4 +1926,417 @@ export function computePathProgress(steps: { progressStatus: string; isRequired:
   if (required.length === 0) return 100;
   const done = required.filter(s => s.progressStatus === "completed" || s.progressStatus === "exempted").length;
   return Math.round((done / required.length) * 100);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T5-1/T5-2 Micro-Credential Records
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getMicroCredentialsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(microCredentialRecords)
+    .where(eq(microCredentialRecords.userId, userId))
+    .orderBy(desc(microCredentialRecords.createdAt));
+}
+
+export async function getMicroCredentialsByGroup(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(microCredentialRecords)
+    .where(eq(microCredentialRecords.groupId, groupId))
+    .orderBy(desc(microCredentialRecords.createdAt));
+}
+
+export async function getAllMicroCredentials(filters?: { status?: string; groupId?: number }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [];
+  if (filters?.status) conditions.push(eq(microCredentialRecords.status, filters.status as any));
+  if (filters?.groupId) conditions.push(eq(microCredentialRecords.groupId, filters.groupId));
+  return db.select().from(microCredentialRecords)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(microCredentialRecords.createdAt));
+}
+
+export async function getMicroCredentialById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(microCredentialRecords).where(eq(microCredentialRecords.id, id));
+  return rows[0] ?? null;
+}
+
+export async function upsertMicroCredential(data: {
+  id?: number;
+  userId: number;
+  groupId?: number | null;
+  title: string;
+  clusterLabel?: string | null;
+  workContext?: string | null;
+  qualificationLevel?: string | null;
+  isWorkRelevant?: boolean;
+  isAssessable?: boolean;
+  hasModularIntegrity?: boolean;
+  isStackable?: boolean;
+  qualificationScore?: number | null;
+  status?: string;
+  tesdaReferenceId?: number | null;
+  blueprintId?: number | null;
+  learningPathId?: number | null;
+  sourceGapRecordIds?: number[] | null;
+  description?: string | null;
+  isAiGenerated?: boolean;
+  aiRationale?: string | null;
+  certificateNumber?: string | null;
+  issuingBody?: string | null;
+  issuedAt?: Date | null;
+  expiresAt?: Date | null;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  if (data.id) {
+    await db.update(microCredentialRecords)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(microCredentialRecords.id, data.id));
+    return getMicroCredentialById(data.id);
+  }
+  const [result] = await db.insert(microCredentialRecords).values(data as any);
+  return getMicroCredentialById((result as any).insertId);
+}
+
+export async function advanceMicroCredentialStatus(
+  id: number,
+  newStatus: "proposed" | "approved" | "enrolled" | "completed" | "stacked" | "rejected",
+  meta?: { approvedBy?: number; rejectionReason?: string; certificateNumber?: string; issuingBody?: string; issuedAt?: Date }
+) {
+  const db = await getDb();
+  if (!db) return null;
+  const now = new Date();
+  const update: Record<string, any> = { status: newStatus, updatedAt: now };
+  if (newStatus === "approved" && meta?.approvedBy) { update.approvedBy = meta.approvedBy; update.approvedAt = now; }
+  if (newStatus === "enrolled") update.enrolledAt = now;
+  if (newStatus === "completed") {
+    update.completedAt = now;
+    if (meta?.certificateNumber) update.certificateNumber = meta.certificateNumber;
+    if (meta?.issuingBody) update.issuingBody = meta.issuingBody;
+    if (meta?.issuedAt) update.issuedAt = meta.issuedAt;
+  }
+  if (newStatus === "stacked") update.stackedAt = now;
+  if (newStatus === "rejected" && meta?.rejectionReason) update.rejectionReason = meta.rejectionReason;
+  await db.update(microCredentialRecords).set(update).where(eq(microCredentialRecords.id, id));
+  return getMicroCredentialById(id);
+}
+
+export async function deleteMicroCredential(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(microCredentialRecords).where(eq(microCredentialRecords.id, id));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T5-4 TNA Campaigns
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getAllCampaigns() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tnaCampaigns).orderBy(desc(tnaCampaigns.createdAt));
+}
+
+export async function getCampaignById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(tnaCampaigns).where(eq(tnaCampaigns.id, id));
+  return rows[0] ?? null;
+}
+
+export async function upsertCampaign(data: {
+  id?: number;
+  title: string;
+  description?: string | null;
+  status?: string;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  linkedGroupIds?: number[] | null;
+  linkedBlueprintIds?: number[] | null;
+  reviewNotes?: string | null;
+  finalizationSummary?: string | null;
+  createdBy?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  if (data.id) {
+    await db.update(tnaCampaigns).set({ ...data, updatedAt: new Date() } as any).where(eq(tnaCampaigns.id, data.id));
+    return getCampaignById(data.id);
+  }
+  const [result] = await db.insert(tnaCampaigns).values(data as any);
+  return getCampaignById((result as any).insertId);
+}
+
+export async function advanceCampaignStatus(
+  id: number,
+  newStatus: "draft" | "open" | "closed" | "under_review" | "finalized",
+  meta?: { finalizedBy?: number; finalizationSummary?: string }
+) {
+  const db = await getDb();
+  if (!db) return null;
+  const now = new Date();
+  const update: Record<string, any> = { status: newStatus, updatedAt: now };
+  if (newStatus === "finalized" && meta?.finalizedBy) {
+    update.finalizedBy = meta.finalizedBy;
+    update.finalizedAt = now;
+    if (meta.finalizationSummary) update.finalizationSummary = meta.finalizationSummary;
+  }
+  await db.update(tnaCampaigns).set(update).where(eq(tnaCampaigns.id, id));
+  return getCampaignById(id);
+}
+
+export async function refreshCampaignStats(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const campaign = await getCampaignById(id);
+  if (!campaign) return null;
+  const groupIds: number[] = Array.isArray(campaign.linkedGroupIds) ? campaign.linkedGroupIds as number[] : [];
+  if (groupIds.length === 0) return campaign;
+  const surveyRows = await db.select().from(surveys)
+    .where(inArray(surveys.groupId, groupIds));
+  const completedSurveys = surveyRows.filter((s: any) => s.status === "completed").length;
+  const totalRespondents = surveyRows.length;
+  const surveyIds = surveyRows.map((s: any) => s.id);
+  let avgGapScore = 0;
+  let criticalGapCount = 0;
+  if (surveyIds.length > 0) {
+    const gapRows = await db.select().from(competencyGapRecords)
+      .where(inArray(competencyGapRecords.surveyId, surveyIds));
+    avgGapScore = gapRows.length > 0
+      ? gapRows.reduce((sum: number, r: any) => sum + r.gapScore, 0) / gapRows.length
+      : 0;
+    criticalGapCount = gapRows.filter((r: any) => r.gapLevel === "critical").length;
+  }
+  await db.update(tnaCampaigns).set({
+    totalRespondents,
+    completedSurveys,
+    avgGapScore: Math.round(avgGapScore * 10) / 10,
+    criticalGapCount,
+    updatedAt: new Date(),
+  }).where(eq(tnaCampaigns.id, id));
+  return getCampaignById(id);
+}
+
+export async function deleteCampaign(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(tnaCampaigns).where(eq(tnaCampaigns.id, id));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T5-5 Performance Evidence
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getPerformanceEvidenceByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(performanceEvidence)
+    .where(eq(performanceEvidence.userId, userId))
+    .orderBy(desc(performanceEvidence.createdAt));
+}
+
+export async function getPerformanceEvidenceByGroup(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(performanceEvidence)
+    .where(eq(performanceEvidence.groupId, groupId))
+    .orderBy(desc(performanceEvidence.createdAt));
+}
+
+export async function getPerformanceEvidenceById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(performanceEvidence).where(eq(performanceEvidence.id, id));
+  return rows[0] ?? null;
+}
+
+export async function upsertPerformanceEvidence(data: {
+  id?: number;
+  userId: number;
+  groupId?: number | null;
+  evidenceType: string;
+  title: string;
+  description?: string | null;
+  metricName?: string | null;
+  metricValue?: number | null;
+  metricTarget?: number | null;
+  metricUnit?: string | null;
+  performanceScore?: number | null;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+  sourceDocument?: string | null;
+  questionId?: number | null;
+  submittedBy?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  if (data.id) {
+    await db.update(performanceEvidence).set({ ...data, updatedAt: new Date() } as any).where(eq(performanceEvidence.id, data.id));
+    return getPerformanceEvidenceById(data.id);
+  }
+  const [result] = await db.insert(performanceEvidence).values(data as any);
+  return getPerformanceEvidenceById((result as any).insertId);
+}
+
+export async function verifyPerformanceEvidence(id: number, verifiedBy: number) {
+  const db = await getDb();
+  if (!db) return null;
+  await db.update(performanceEvidence).set({
+    isVerified: true,
+    verifiedBy,
+    verifiedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(performanceEvidence.id, id));
+  return getPerformanceEvidenceById(id);
+}
+
+export async function deletePerformanceEvidence(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(performanceEvidence).where(eq(performanceEvidence.id, id));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T5-3 Enterprise Workforce Analytics
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getWorkforceAnalytics() {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Get all gap records
+  const allGaps = await db.select({
+    surveyId: competencyGapRecords.surveyId,
+    questionId: competencyGapRecords.questionId,
+    actualScore: competencyGapRecords.actualScore,
+    targetScore: competencyGapRecords.targetScore,
+    gapScore: competencyGapRecords.gapScore,
+    gapPercentage: competencyGapRecords.gapPercentage,
+    gapLevel: competencyGapRecords.gapLevel,
+    category: competencyGapRecords.category,
+  }).from(competencyGapRecords);
+
+  // Get all completed surveys
+  const allSurveys = await db.select({
+    id: surveys.id,
+    userId: surveys.userId,
+    groupId: surveys.groupId,
+  }).from(surveys).where(eq(surveys.status, "completed"));
+
+  // Get all users for department/role breakdown
+  const allUsers = await db.select({
+    id: users.id,
+    department: users.department,
+    tnaRole: users.tnaRole,
+    jobTitle: users.jobTitle,
+  }).from(users);
+
+  // Build lookup maps
+  const userMap = new Map(allUsers.map((u) => [u.id, u]));
+  const surveyMap = new Map(allSurveys.map((s) => [s.id, s]));
+
+  // Aggregate by category
+  const byCategory: Record<string, { count: number; totalGap: number; criticalCount: number; highCount: number }> = {};
+  for (const gap of allGaps) {
+    const cat = gap.category || "unknown";
+    if (!byCategory[cat]) byCategory[cat] = { count: 0, totalGap: 0, criticalCount: 0, highCount: 0 };
+    byCategory[cat].count++;
+    byCategory[cat].totalGap += gap.gapScore;
+    if (gap.gapLevel === "critical") byCategory[cat].criticalCount++;
+    if (gap.gapLevel === "high") byCategory[cat].highCount++;
+  }
+
+  // Aggregate by department
+  const byDepartment: Record<string, { count: number; totalGap: number; criticalCount: number }> = {};
+  const respondentsByDept: Record<string, Set<number>> = {};
+  for (const gap of allGaps) {
+    const survey = surveyMap.get(gap.surveyId);
+    if (!survey) continue;
+    const user = userMap.get(survey.userId);
+    const dept = user?.department || "Unknown";
+    if (!byDepartment[dept]) byDepartment[dept] = { count: 0, totalGap: 0, criticalCount: 0 };
+    byDepartment[dept].count++;
+    byDepartment[dept].totalGap += gap.gapScore;
+    if (gap.gapLevel === "critical") byDepartment[dept].criticalCount++;
+  }
+  for (const survey of allSurveys) {
+    const user = userMap.get(survey.userId);
+    const dept = user?.department || "Unknown";
+    if (!respondentsByDept[dept]) respondentsByDept[dept] = new Set();
+    respondentsByDept[dept].add(survey.userId);
+  }
+
+  // Aggregate by role
+  const byRole: Record<string, { count: number; totalGap: number; criticalCount: number }> = {};
+  const respondentsByRole: Record<string, Set<number>> = {};
+  for (const gap of allGaps) {
+    const survey = surveyMap.get(gap.surveyId);
+    if (!survey) continue;
+    const user = userMap.get(survey.userId);
+    const role = user?.tnaRole || "unknown";
+    if (!byRole[role]) byRole[role] = { count: 0, totalGap: 0, criticalCount: 0 };
+    byRole[role].count++;
+    byRole[role].totalGap += gap.gapScore;
+    if (gap.gapLevel === "critical") byRole[role].criticalCount++;
+  }
+  for (const survey of allSurveys) {
+    const user = userMap.get(survey.userId);
+    const role = user?.tnaRole || "unknown";
+    if (!respondentsByRole[role]) respondentsByRole[role] = new Set();
+    respondentsByRole[role].add(survey.userId);
+  }
+
+  // Gap distribution histogram (10 buckets: 0-10, 10-20, ..., 90-100)
+  const distribution = Array.from({ length: 10 }, (_, i) => ({
+    bucket: `${i * 10}–${(i + 1) * 10}`,
+    count: allGaps.filter((g) => g.gapScore >= i * 10 && g.gapScore < (i + 1) * 10).length,
+  }));
+
+  // Overall summary
+  const totalGaps = allGaps.length;
+  const avgGapScore = totalGaps > 0 ? allGaps.reduce((s, g) => s + g.gapScore, 0) / totalGaps : 0;
+  const criticalCount = allGaps.filter((g) => g.gapLevel === "critical").length;
+  const highCount = allGaps.filter((g) => g.gapLevel === "high").length;
+  const moderateCount = allGaps.filter((g) => g.gapLevel === "moderate").length;
+  const lowCount = allGaps.filter((g) => g.gapLevel === "low").length;
+
+  return {
+    summary: {
+      totalGapRecords: totalGaps,
+      avgGapScore: Math.round(avgGapScore * 10) / 10,
+      criticalCount,
+      highCount,
+      moderateCount,
+      lowCount,
+      totalRespondents: allSurveys.length,
+    },
+    byCategory: Object.entries(byCategory).map(([cat, v]) => ({
+      category: cat,
+      avgGap: v.count > 0 ? Math.round((v.totalGap / v.count) * 10) / 10 : 0,
+      criticalCount: v.criticalCount,
+      highCount: v.highCount,
+      recordCount: v.count,
+    })).sort((a, b) => b.avgGap - a.avgGap),
+    byDepartment: Object.entries(byDepartment).map(([dept, v]) => ({
+      department: dept,
+      avgGap: v.count > 0 ? Math.round((v.totalGap / v.count) * 10) / 10 : 0,
+      criticalCount: v.criticalCount,
+      recordCount: v.count,
+      respondentCount: respondentsByDept[dept]?.size ?? 0,
+    })).sort((a, b) => b.avgGap - a.avgGap),
+    byRole: Object.entries(byRole).map(([role, v]) => ({
+      role,
+      avgGap: v.count > 0 ? Math.round((v.totalGap / v.count) * 10) / 10 : 0,
+      criticalCount: v.criticalCount,
+      recordCount: v.count,
+      respondentCount: respondentsByRole[role]?.size ?? 0,
+    })).sort((a, b) => b.avgGap - a.avgGap),
+    distribution,
+  };
 }

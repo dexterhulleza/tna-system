@@ -104,6 +104,27 @@ import {
   deleteLearningPathStep,
   deleteAllStepsForPath,
   computePathProgress,
+  // T5 Micro-Credential, Campaigns, Performance Evidence, Analytics
+  getMicroCredentialsByUser,
+  getMicroCredentialsByGroup,
+  getAllMicroCredentials,
+  getMicroCredentialById,
+  upsertMicroCredential,
+  advanceMicroCredentialStatus,
+  deleteMicroCredential,
+  getAllCampaigns,
+  getCampaignById,
+  upsertCampaign,
+  advanceCampaignStatus,
+  refreshCampaignStats,
+  deleteCampaign,
+  getPerformanceEvidenceByUser,
+  getPerformanceEvidenceByGroup,
+  getPerformanceEvidenceById,
+  upsertPerformanceEvidence,
+  verifyPerformanceEvidence,
+  deletePerformanceEvidence,
+  getWorkforceAnalytics,
 } from "./db";
 import { analyzeGaps, generateRecommendations } from "./tnaEngine";
 import {
@@ -2824,6 +2845,219 @@ Return ONLY valid JSON in this exact format:
         const savedSteps = await getStepsForPath(pathId);
         return { path: savedPath, steps: savedSteps };
       }),
+  }),
+  // ─── T5 Micro-Credential Engine ───────────────────────────────────────────
+  microCredentials: router({
+    list: adminProcedure
+      .input(z.object({ groupId: z.number().optional(), status: z.string().optional() }))
+      .query(async ({ input }) => {
+        return getAllMicroCredentials(input);
+      }),
+    listByUser: adminProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ input }) => {
+        return getMicroCredentialsByUser(input.userId);
+      }),
+    getById: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return getMicroCredentialById(input.id);
+      }),
+    upsert: adminProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        userId: z.number(),
+        groupId: z.number().nullable().optional(),
+        title: z.string(),
+        clusterLabel: z.string().nullable().optional(),
+        workContext: z.string().nullable().optional(),
+        qualificationLevel: z.string().nullable().optional(),
+        isWorkRelevant: z.boolean().optional(),
+        isAssessable: z.boolean().optional(),
+        hasModularIntegrity: z.boolean().optional(),
+        isStackable: z.boolean().optional(),
+        qualificationScore: z.number().nullable().optional(),
+        status: z.string().optional(),
+        tesdaReferenceId: z.number().nullable().optional(),
+        blueprintId: z.number().nullable().optional(),
+        learningPathId: z.number().nullable().optional(),
+        description: z.string().nullable().optional(),
+        isAiGenerated: z.boolean().optional(),
+        aiRationale: z.string().nullable().optional(),
+        certificateNumber: z.string().nullable().optional(),
+        issuingBody: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return upsertMicroCredential(input);
+      }),
+    advanceStatus: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        newStatus: z.enum(["proposed", "approved", "enrolled", "completed", "stacked", "rejected"]),
+        approvedBy: z.number().optional(),
+        rejectionReason: z.string().optional(),
+        certificateNumber: z.string().optional(),
+        issuingBody: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return advanceMicroCredentialStatus(input.id, input.newStatus, {
+          approvedBy: input.approvedBy ?? ctx.user.id,
+          rejectionReason: input.rejectionReason,
+          certificateNumber: input.certificateNumber,
+          issuingBody: input.issuingBody,
+        });
+      }),
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteMicroCredential(input.id);
+        return { success: true };
+      }),
+    generate: adminProcedure
+      .input(z.object({ groupId: z.number(), userId: z.number() }))
+      .mutation(async ({ input }) => {
+        // Fetch gap records for this user
+        const gapRows = await getAllMicroCredentials({ groupId: input.groupId });
+        const { invokeLLM } = await import("./_core/llm");
+        const prompt = `You are a TESDA-aligned micro-credential recommendation engine.
+Analyze the following competency gaps and generate micro-credential proposals.
+For each proposal, apply the four qualification rules:
+1. Work Relevance: Is the competency directly tied to work performance?
+2. Assessability: Can it be objectively measured/assessed?
+3. Modular Integrity: Does it form a coherent, self-contained learning unit?
+4. Stackability: Can it be stacked with other credentials toward a full qualification?
+
+Generate 3-5 micro-credential proposals using the naming pattern:
+[Competency Cluster] + [Work Context] + [Level]
+
+Return JSON array: [{"title": string, "clusterLabel": string, "workContext": string, "qualificationLevel": string, "isWorkRelevant": boolean, "isAssessable": boolean, "hasModularIntegrity": boolean, "isStackable": boolean, "qualificationScore": number, "description": string, "aiRationale": string}]`;
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: prompt },
+            { role: "user", content: `User ID: ${input.userId}, Group ID: ${input.groupId}. Generate micro-credential recommendations based on typical competency gaps in a TESDA-aligned workforce.` },
+          ],
+          response_format: { type: "json_schema", json_schema: { name: "micro_credentials", strict: true, schema: { type: "object", properties: { proposals: { type: "array", items: { type: "object", properties: { title: { type: "string" }, clusterLabel: { type: "string" }, workContext: { type: "string" }, qualificationLevel: { type: "string" }, isWorkRelevant: { type: "boolean" }, isAssessable: { type: "boolean" }, hasModularIntegrity: { type: "boolean" }, isStackable: { type: "boolean" }, qualificationScore: { type: "number" }, description: { type: "string" }, aiRationale: { type: "string" } }, required: ["title", "clusterLabel", "workContext", "qualificationLevel", "isWorkRelevant", "isAssessable", "hasModularIntegrity", "isStackable", "qualificationScore", "description", "aiRationale"], additionalProperties: false } } }, required: ["proposals"], additionalProperties: false } } },
+        });
+        const raw = response?.choices?.[0]?.message?.content ?? "{}";
+        const parsed = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw));
+        const proposals = parsed.proposals ?? [];
+        const saved = [];
+        for (const p of proposals) {
+          const record = await upsertMicroCredential({
+            ...p,
+            userId: input.userId,
+            groupId: input.groupId,
+            isAiGenerated: true,
+            status: "proposed",
+          });
+          saved.push(record);
+        }
+        return saved;
+      }),
+  }),
+
+  // ─── T5-4 TNA Campaigns ────────────────────────────────────────────────────
+  campaigns: router({
+    list: adminProcedure.query(async () => getAllCampaigns()),
+    getById: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => getCampaignById(input.id)),
+    upsert: adminProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        title: z.string(),
+        description: z.string().nullable().optional(),
+        status: z.string().optional(),
+        startDate: z.string().nullable().optional(),
+        endDate: z.string().nullable().optional(),
+        linkedGroupIds: z.array(z.number()).nullable().optional(),
+        linkedBlueprintIds: z.array(z.number()).nullable().optional(),
+        reviewNotes: z.string().nullable().optional(),
+        finalizationSummary: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return upsertCampaign({
+          ...input,
+          startDate: input.startDate ? new Date(input.startDate) : null,
+          endDate: input.endDate ? new Date(input.endDate) : null,
+          createdBy: ctx.user.id,
+        });
+      }),
+    advanceStatus: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        newStatus: z.enum(["draft", "open", "closed", "under_review", "finalized"]),
+        finalizationSummary: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return advanceCampaignStatus(input.id, input.newStatus, {
+          finalizedBy: ctx.user.id,
+          finalizationSummary: input.finalizationSummary,
+        });
+      }),
+    refreshStats: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => refreshCampaignStats(input.id)),
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteCampaign(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ─── T5-5 Performance Evidence ─────────────────────────────────────────────
+  performanceEvidence: router({
+    listByGroup: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ input }) => getPerformanceEvidenceByGroup(input.groupId)),
+    listByUser: protectedProcedure
+      .input(z.object({ userId: z.number().optional() }))
+      .query(async ({ input, ctx }) => {
+        const targetId = input.userId ?? ctx.user.id;
+        return getPerformanceEvidenceByUser(targetId);
+      }),
+    upsert: protectedProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        userId: z.number().optional(),
+        groupId: z.number().nullable().optional(),
+        evidenceType: z.enum(["kpi", "productivity", "quality", "incident", "audit_finding", "peer_feedback", "customer_feedback", "other"]),
+        title: z.string(),
+        description: z.string().nullable().optional(),
+        metricName: z.string().nullable().optional(),
+        metricValue: z.number().nullable().optional(),
+        metricTarget: z.number().nullable().optional(),
+        metricUnit: z.string().nullable().optional(),
+        performanceScore: z.number().min(0).max(100).nullable().optional(),
+        periodStart: z.string().nullable().optional(),
+        periodEnd: z.string().nullable().optional(),
+        sourceDocument: z.string().nullable().optional(),
+        questionId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return upsertPerformanceEvidence({
+          ...input,
+          userId: input.userId ?? ctx.user.id,
+          periodStart: input.periodStart ? new Date(input.periodStart) : null,
+          periodEnd: input.periodEnd ? new Date(input.periodEnd) : null,
+          submittedBy: ctx.user.id,
+        });
+      }),
+    verify: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => verifyPerformanceEvidence(input.id, ctx.user.id)),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deletePerformanceEvidence(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ─── T5-3 Enterprise Workforce Analytics ───────────────────────────────────
+  workforceAnalytics: router({
+    get: adminProcedure.query(async () => getWorkforceAnalytics()),
   }),
 });
 export type AppRouter = typeof appRouter;

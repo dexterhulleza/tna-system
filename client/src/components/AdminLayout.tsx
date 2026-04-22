@@ -44,6 +44,9 @@ import {
   UserCheck,
   BookMarked,
   Route,
+  Award,
+  Megaphone,
+  TrendingUp as TrendingUpIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +107,9 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: UserCheck, label: "Supervisor Validation", path: "/admin/supervisor-validation", adminOnly: true },
       { icon: BookMarked, label: "Curriculum Blueprints", path: "/admin/curriculum", adminOnly: true },
       { icon: Route, label: "Learning Paths", path: "/admin/learning-paths", adminOnly: true },
+      { icon: Award, label: "Micro-Credentials", path: "/admin/micro-credentials", adminOnly: true },
+      { icon: TrendingUpIcon, label: "Workforce Analytics", path: "/admin/workforce-analytics", adminOnly: true },
+      { icon: Megaphone, label: "TNA Campaigns", path: "/admin/campaigns", adminOnly: true },
     ],
   },
   {
@@ -172,7 +178,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const isInSettings = ["/admin/questions", "/admin/sectors", "/admin/ai-settings", "/admin/audit-logs"].some(p =>
     location.startsWith(p)
   );
-  const isInTnaEngine = ["/admin/tesda-library", "/admin/task-mapping", "/admin/scoring-weights", "/admin/target-proficiency", "/admin/gap-records", "/admin/prioritization", "/admin/supervisor-validation", "/admin/curriculum", "/admin/learning-paths"].some(p =>
+  const isInTnaEngine = ["/admin/tesda-library", "/admin/task-mapping", "/admin/scoring-weights", "/admin/target-proficiency", "/admin/gap-records", "/admin/prioritization", "/admin/supervisor-validation", "/admin/curriculum", "/admin/learning-paths", "/admin/micro-credentials", "/admin/workforce-analytics", "/admin/campaigns"].some(p =>
     location.startsWith(p)
   );
 

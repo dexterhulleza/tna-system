@@ -412,3 +412,15 @@
 - [x] StaffLayout: My Learning Path nav item added
 - [x] AdminLayout: Learning Paths nav item added to TNA Engine group
 - [x] App.tsx: /admin/learning-paths and /dashboard/my-path routes registered
+
+## Tier 5 — Micro-Credential & Advanced Analytics (Completed Apr 22, 2026)
+- [x] T5-1: Micro-credential recommendation engine (AI-powered, generates credential records from gap data)
+- [x] T5-2: Micro-credential record tracking with status workflow (Recommended → In Progress → Completed → Expired → Revoked)
+- [x] T5-3: Enterprise workforce analytics dashboard (gap distribution, category heatmap, department/role breakdown, KPI cards)
+- [x] T5-4: TNA campaign lifecycle management (Draft → Open → Closed → Under Review → Finalized, linked groups/blueprints, stats refresh)
+- [x] T5-5: Performance evidence input page — staff can submit KPI/productivity/quality evidence; admin can verify records
+- [x] DB: micro_credential_records, tna_campaigns, performance_evidence tables (migration 0015 applied)
+- [x] Backend: 18 new tRPC procedures across microCredentials, workforceAnalytics, campaigns, performanceEvidence routers
+- [x] Frontend: AdminMicroCredentials, AdminWorkforceAnalytics, AdminCampaigns pages (admin sidebar TNA Engine group)
+- [x] Frontend: PerformanceEvidence page (staff sidebar)
+- [x] Routes registered in App.tsx; sidebar and StaffLayout nav updated

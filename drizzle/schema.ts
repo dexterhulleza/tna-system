@@ -706,3 +706,144 @@ export const learningPathSteps = mysqlTable("learning_path_steps", {
 });
 export type LearningPathStep = typeof learningPathSteps.$inferSelect;
 export type InsertLearningPathStep = typeof learningPathSteps.$inferInsert;
+
+// ─── Micro-Credential Records (T5-2) ─────────────────────────────────────────
+// Tracks individual micro-credential proposals and their status lifecycle.
+// T5-1 recommendation engine generates proposals; HR approves/enrolls/completes them.
+export const microCredentialRecords = mysqlTable("micro_credential_records", {
+  id: int("id").autoincrement().primaryKey(),
+  // Who this credential belongs to
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  groupId: int("groupId").references(() => surveyGroups.id, { onDelete: "set null" }),
+  // Credential identity
+  title: varchar("title", { length: 500 }).notNull(),          // [Cluster] + [Work Context] + [Level]
+  clusterLabel: varchar("clusterLabel", { length: 255 }),      // Competency cluster name
+  workContext: varchar("workContext", { length: 255 }),         // Work context descriptor
+  qualificationLevel: varchar("qualificationLevel", { length: 50 }), // NC I, NC II, etc.
+  // Qualification rules (T5-1 four rules)
+  isWorkRelevant: boolean("isWorkRelevant").notNull().default(false),
+  isAssessable: boolean("isAssessable").notNull().default(false),
+  hasModularIntegrity: boolean("hasModularIntegrity").notNull().default(false),
+  isStackable: boolean("isStackable").notNull().default(false),
+  qualificationScore: float("qualificationScore"),             // 0-100 composite of four rules
+  // Status lifecycle
+  status: mysqlEnum("status", [
+    "proposed",
+    "approved",
+    "enrolled",
+    "completed",
+    "stacked",
+    "rejected",
+  ]).notNull().default("proposed"),
+  // Links
+  tesdaReferenceId: int("tesdaReferenceId").references(() => tesdaReferences.id, { onDelete: "set null" }),
+  blueprintId: int("blueprintId").references(() => curriculumBlueprints.id, { onDelete: "set null" }),
+  learningPathId: int("learningPathId").references(() => learningPaths.id, { onDelete: "set null" }),
+  // Gap records that triggered this recommendation (JSON array of gap record IDs)
+  sourceGapRecordIds: json("sourceGapRecordIds"),
+  // Metadata
+  description: text("description"),
+  isAiGenerated: boolean("isAiGenerated").notNull().default(false),
+  aiRationale: text("aiRationale"),
+  // HR actions
+  approvedBy: int("approvedBy").references(() => users.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approvedAt"),
+  enrolledAt: timestamp("enrolledAt"),
+  completedAt: timestamp("completedAt"),
+  stackedAt: timestamp("stackedAt"),
+  rejectionReason: text("rejectionReason"),
+  // Qualification history (certificate number, issuing body, etc.)
+  certificateNumber: varchar("certificateNumber", { length: 200 }),
+  issuingBody: varchar("issuingBody", { length: 255 }),
+  issuedAt: timestamp("issuedAt"),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type MicroCredentialRecord = typeof microCredentialRecords.$inferSelect;
+export type InsertMicroCredentialRecord = typeof microCredentialRecords.$inferInsert;
+
+// ─── TNA Campaigns (T5-4) ─────────────────────────────────────────────────────
+// A campaign is the top-level object that links survey groups, role profiles,
+// gap records, curriculum blueprints, and learning paths into a single TNA cycle.
+export const tnaCampaigns = mysqlTable("tna_campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  // Status lifecycle: Draft → Open → Closed → Under Review → Finalized
+  status: mysqlEnum("status", [
+    "draft",
+    "open",
+    "closed",
+    "under_review",
+    "finalized",
+  ]).notNull().default("draft"),
+  // Date range
+  startDate: timestamp("startDate"),
+  endDate: timestamp("endDate"),
+  // Linked objects (JSON arrays of IDs)
+  linkedGroupIds: json("linkedGroupIds"),         // surveyGroup IDs
+  linkedBlueprintIds: json("linkedBlueprintIds"), // curriculumBlueprint IDs
+  // Summary stats (denormalized for dashboard speed)
+  totalRespondents: int("totalRespondents").default(0),
+  completedSurveys: int("completedSurveys").default(0),
+  avgGapScore: float("avgGapScore"),
+  criticalGapCount: int("criticalGapCount").default(0),
+  // Ownership
+  createdBy: int("createdBy").references(() => users.id, { onDelete: "set null" }),
+  finalizedBy: int("finalizedBy").references(() => users.id, { onDelete: "set null" }),
+  finalizedAt: timestamp("finalizedAt"),
+  // Notes
+  reviewNotes: text("reviewNotes"),
+  finalizationSummary: text("finalizationSummary"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TnaCampaign = typeof tnaCampaigns.$inferSelect;
+export type InsertTnaCampaign = typeof tnaCampaigns.$inferInsert;
+
+// ─── Performance Evidence (T5-5) ─────────────────────────────────────────────
+// Structured performance evidence linked to the employee profile.
+// Feeds into the weighted scoring formula as the KPI source.
+export const performanceEvidence = mysqlTable("performance_evidence", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  groupId: int("groupId").references(() => surveyGroups.id, { onDelete: "set null" }),
+  // Evidence type
+  evidenceType: mysqlEnum("evidenceType", [
+    "kpi",
+    "productivity",
+    "quality",
+    "incident",
+    "audit_finding",
+    "peer_feedback",
+    "customer_feedback",
+    "other",
+  ]).notNull(),
+  // Content
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  // Quantitative data
+  metricName: varchar("metricName", { length: 255 }),
+  metricValue: float("metricValue"),
+  metricTarget: float("metricTarget"),
+  metricUnit: varchar("metricUnit", { length: 100 }),
+  // Performance rating derived from metric (0-100)
+  performanceScore: float("performanceScore"),
+  // Period
+  periodStart: timestamp("periodStart"),
+  periodEnd: timestamp("periodEnd"),
+  // Source / verifiability
+  sourceDocument: varchar("sourceDocument", { length: 500 }),
+  verifiedBy: int("verifiedBy").references(() => users.id, { onDelete: "set null" }),
+  verifiedAt: timestamp("verifiedAt"),
+  isVerified: boolean("isVerified").notNull().default(false),
+  // Linked to a specific question/competency (optional)
+  questionId: int("questionId").references(() => questions.id, { onDelete: "set null" }),
+  // Submission
+  submittedBy: int("submittedBy").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PerformanceEvidence = typeof performanceEvidence.$inferSelect;
+export type InsertPerformanceEvidence = typeof performanceEvidence.$inferInsert;

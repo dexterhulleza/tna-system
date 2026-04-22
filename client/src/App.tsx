@@ -36,6 +36,10 @@ import AdminCurriculumBlueprints from "./pages/admin/AdminCurriculumBlueprints";
 import AdminCurriculumDetail from "./pages/admin/AdminCurriculumDetail";
 import AdminLearningPaths from "./pages/admin/AdminLearningPaths";
 import MyLearningPath from "./pages/MyLearningPath";
+import AdminMicroCredentials from "./pages/admin/AdminMicroCredentials";
+import AdminWorkforceAnalytics from "./pages/admin/AdminWorkforceAnalytics";
+import AdminCampaigns from "./pages/admin/AdminCampaigns";
+import PerformanceEvidence from "./pages/PerformanceEvidence";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -104,6 +108,12 @@ function Router() {
       {/* Learning Path Engine pages (T4) */}
       <Route path="/admin/learning-paths" component={withAdminLayout(AdminLearningPaths)} />
       <Route path="/dashboard/my-path" component={MyLearningPath} />
+      <Route path="/dashboard/performance-evidence" component={PerformanceEvidence} />
+
+      {/* T5 — Micro-Credential & Advanced Analytics */}
+      <Route path="/admin/micro-credentials" component={withAdminLayout(AdminMicroCredentials)} />
+      <Route path="/admin/workforce-analytics" component={withAdminLayout(AdminWorkforceAnalytics)} />
+      <Route path="/admin/campaigns" component={withAdminLayout(AdminCampaigns)} />
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

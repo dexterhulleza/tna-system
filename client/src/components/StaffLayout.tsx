@@ -25,6 +25,7 @@ import {
   Clock,
   User,
   Route,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: ClipboardList, label: "My Assessment", path: "/survey/start" },
   { icon: Route, label: "My Learning Path", path: "/dashboard/my-path" },
+  { icon: TrendingUp, label: "Performance Evidence", path: "/dashboard/performance-evidence" },
   { icon: User, label: "Profile", path: "/profile-setup" },
 ];
 
