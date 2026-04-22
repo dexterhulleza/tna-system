@@ -38,6 +38,10 @@ import {
   Library,
   Network,
   SlidersHorizontal,
+  Target,
+  BarChart2,
+  ListOrdered,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +96,10 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: Library, label: "TESDA Library", path: "/admin/tesda-library", adminOnly: true },
       { icon: Network, label: "Task Mapping", path: "/admin/task-mapping", adminOnly: true },
       { icon: SlidersHorizontal, label: "Scoring Weights", path: "/admin/scoring-weights", adminOnly: true },
+      { icon: Target, label: "Target Proficiency", path: "/admin/target-proficiency", adminOnly: true },
+      { icon: BarChart2, label: "Gap Records", path: "/admin/gap-records", adminOnly: true },
+      { icon: ListOrdered, label: "Prioritization", path: "/admin/prioritization", adminOnly: true },
+      { icon: UserCheck, label: "Supervisor Validation", path: "/admin/supervisor-validation", adminOnly: true },
     ],
   },
   {
@@ -160,7 +168,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const isInSettings = ["/admin/questions", "/admin/sectors", "/admin/ai-settings", "/admin/audit-logs"].some(p =>
     location.startsWith(p)
   );
-  const isInTnaEngine = ["/admin/tesda-library", "/admin/task-mapping", "/admin/scoring-weights"].some(p =>
+  const isInTnaEngine = ["/admin/tesda-library", "/admin/task-mapping", "/admin/scoring-weights", "/admin/target-proficiency", "/admin/gap-records", "/admin/prioritization", "/admin/supervisor-validation"].some(p =>
     location.startsWith(p)
   );
 

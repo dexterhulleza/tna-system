@@ -379,3 +379,13 @@
 - [x] AdminLayout.tsx: TNA Engine collapsible group added (TESDA Library, Task Mapping, Scoring Weights)
 - [x] AdminLayout.tsx: refactored to per-group open state (openGroups map) to support multiple collapsible sections
 - [x] 0 TypeScript errors, all tests passing
+
+## Tier 2 — Core TNA Engine (T2-1 to T2-4)
+- [x] T2-1: Target Proficiency Levels — DB table (target_proficiencies), backend CRUD procedures, AdminTargetProficiency.tsx page
+- [x] T2-2: Competency Gap Records — DB table (competency_gap_records), saveCompetencyGapRecords helper, AdminGapRecords.tsx drill-down page
+- [x] T2-3: Prioritization Matrix — DB table (prioritization_matrix), generate-from-gaps procedure, AdminPrioritizationMatrix.tsx page
+- [x] T2-4: Supervisor Validation Workflow — supervisorScore/kpiScore columns on survey_responses, AdminSupervisorValidation.tsx page
+- [x] tnaEngine.ts updated — gap computed vs. target proficiency (default 80%), composite weighted scoring, GapRecord[] output
+- [x] surveys.complete updated — resolves target proficiencies, applies scoring weights, persists gap records on completion
+- [x] AdminLayout.tsx updated — 4 new sidebar links under TNA Engine group
+- [x] App.tsx updated — 4 new routes registered

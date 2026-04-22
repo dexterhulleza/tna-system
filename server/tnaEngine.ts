@@ -1,6 +1,11 @@
 /**
- * TNA Analysis Engine
- * Performs gap analysis and generates training recommendations
+ * TNA Analysis Engine (T2-enhanced)
+ * Performs gap analysis and generates training recommendations.
+ *
+ * T2-1: Gap is now computed against a target proficiency score (default 80%)
+ *       instead of the raw scale maximum.
+ * T2-2: Returns structured GapRecord[] alongside legacy GapItem[] for DB persistence.
+ * T1-6: Accepts optional scoring weights + supervisor/KPI scores.
  */
 
 type ResponseWithQuestion = {
@@ -11,6 +16,8 @@ type ResponseWithQuestion = {
     responseText: string | null;
     responseValue: number | null;
     responseOptions: string[] | null;
+    supervisorScore?: number | null;
+    kpiScore?: number | null;
     createdAt: Date;
     updatedAt: Date;
   };
@@ -45,11 +52,36 @@ export type GapItem = {
   gapPercentage: number;
 };
 
+/** Structured gap record — one per (report, question), persisted to DB (T2-2) */
+export type GapRecord = {
+  questionId: number;
+  actualScore: number;
+  targetScore: number;
+  gapScore: number;
+  gapPercentage: number;
+  selfScore: number | null;
+  supervisorScore: number | null;
+  kpiScore: number | null;
+  category: string;
+  gapLevel: "critical" | "high" | "moderate" | "low" | "none";
+  usedDefaultTarget: boolean;
+};
+
+export type ScoringWeightsInput = {
+  selfWeight: number;
+  supervisorWeight: number;
+  kpiWeight: number;
+  fallbackToSelfOnly: boolean;
+};
+
+export type TargetProficiencyMap = Map<number, { targetScore: number; usedDefaultTarget: boolean }>;
+
 export type AnalysisResult = {
   overallScore: number;
   gapLevel: "critical" | "high" | "moderate" | "low" | "none";
   categoryScores: Record<string, number>;
   identifiedGaps: GapItem[];
+  gapRecords: GapRecord[];   // T2-2: structured records for DB persistence
   summary: string;
 };
 
@@ -61,11 +93,68 @@ const CATEGORY_LABELS: Record<string, string> = {
   evaluation_success: "Evaluation & Success Criteria",
 };
 
+const DEFAULT_TARGET_SCORE = 80; // 80% of scale = "proficient"
+
+function computeSelfScore(
+  response: ResponseWithQuestion["response"],
+  question: NonNullable<ResponseWithQuestion["question"]>
+): number {
+  const maxVal = question.maxValue ?? 5;
+  const minVal = question.minValue ?? 1;
+  const range = maxVal - minVal || 1;
+  if (question.questionType === "rating" || question.questionType === "scale") {
+    const val = response.responseValue ?? minVal;
+    return ((val - minVal) / range) * 100;
+  } else if (question.questionType === "yes_no") {
+    return response.responseText?.toLowerCase() === "yes" ? 100 : 0;
+  } else if (question.questionType === "multiple_choice") {
+    const opts = question.options ?? [];
+    const idx = opts.indexOf(response.responseText ?? "");
+    if (idx >= 0 && opts.length > 1) return ((opts.length - 1 - idx) / (opts.length - 1)) * 100;
+    return 60;
+  }
+  return 60;
+}
+
+function computeCompositeScore(
+  selfScore: number,
+  supervisorScore: number | null | undefined,
+  kpiScore: number | null | undefined,
+  weights: ScoringWeightsInput
+): number {
+  const hasSup = supervisorScore != null;
+  const hasKpi = kpiScore != null;
+  if (!hasSup && !hasKpi) return selfScore;
+  if (!hasSup && weights.fallbackToSelfOnly) return selfScore;
+  let totalWeight = weights.selfWeight;
+  let weightedSum = selfScore * weights.selfWeight;
+  if (hasSup) { totalWeight += weights.supervisorWeight; weightedSum += supervisorScore! * weights.supervisorWeight; }
+  if (hasKpi) { totalWeight += weights.kpiWeight; weightedSum += kpiScore! * weights.kpiWeight; }
+  return totalWeight > 0 ? weightedSum / totalWeight : selfScore;
+}
+
+function classifyGapLevel(gapPct: number): GapRecord["gapLevel"] {
+  if (gapPct >= 50) return "critical";
+  if (gapPct >= 35) return "high";
+  if (gapPct >= 20) return "moderate";
+  if (gapPct > 0) return "low";
+  return "none";
+}
+
 /**
- * Analyze survey responses and compute gap scores
+ * Analyze survey responses and compute gap scores (T2-enhanced).
+ *
+ * @param responsesWithQuestions  Raw responses joined with question metadata
+ * @param weights                 Scoring weights (defaults to self-only)
+ * @param targetMap               Pre-resolved target proficiency per questionId
  */
-export function analyzeGaps(responsesWithQuestions: ResponseWithQuestion[]): AnalysisResult {
+export function analyzeGaps(
+  responsesWithQuestions: ResponseWithQuestion[],
+  weights: ScoringWeightsInput = { selfWeight: 1, supervisorWeight: 0, kpiWeight: 0, fallbackToSelfOnly: true },
+  targetMap: TargetProficiencyMap = new Map()
+): AnalysisResult {
   const categoryData: Record<string, { totalScore: number; maxScore: number; gaps: GapItem[] }> = {};
+  const gapRecords: GapRecord[] = [];
 
   for (const { response, question } of responsesWithQuestions) {
     if (!question) continue;
@@ -75,56 +164,56 @@ export function analyzeGaps(responsesWithQuestions: ResponseWithQuestion[]): Ana
       categoryData[cat] = { totalScore: 0, maxScore: 0, gaps: [] };
     }
 
-    const weight = question.weight ?? 1;
-    const maxVal = question.maxValue ?? 5;
-    const minVal = question.minValue ?? 1;
-    const range = maxVal - minVal;
+    const qWeight = question.weight ?? 1;
 
-    let score = 0;
-    let maxScore = 0;
+    // 1. Self score (0-100)
+    const selfScore = computeSelfScore(response, question);
 
-    if (question.questionType === "rating" || question.questionType === "scale") {
-      const val = response.responseValue ?? minVal;
-      score = ((val - minVal) / range) * 100 * weight;
-      maxScore = 100 * weight;
-    } else if (question.questionType === "yes_no") {
-      // "yes" = 100, "no" = 0
-      const val = response.responseText?.toLowerCase();
-      score = val === "yes" ? 100 * weight : 0;
-      maxScore = 100 * weight;
-    } else if (question.questionType === "multiple_choice") {
-      // Scored based on position in options (first = best)
-      const opts = question.options ?? [];
-      const chosen = response.responseText ?? "";
-      const idx = opts.indexOf(chosen);
-      if (idx >= 0 && opts.length > 1) {
-        score = ((opts.length - 1 - idx) / (opts.length - 1)) * 100 * weight;
-      }
-      maxScore = 100 * weight;
-    } else if (question.questionType === "text") {
-      // Text responses get a neutral 60% score (can't auto-score)
-      score = 60 * weight;
-      maxScore = 100 * weight;
-    } else {
-      score = 60 * weight;
-      maxScore = 100 * weight;
-    }
+    // 2. Composite score using weights
+    const supervisorScore = response.supervisorScore ?? null;
+    const kpiScore = response.kpiScore ?? null;
+    const actualScore = computeCompositeScore(selfScore, supervisorScore, kpiScore, weights);
 
-    categoryData[cat].totalScore += score;
-    categoryData[cat].maxScore += maxScore;
+    // 3. Target proficiency (T2-1)
+    const targetEntry = targetMap.get(question.id);
+    const targetScore = targetEntry?.targetScore ?? DEFAULT_TARGET_SCORE;
+    const usedDefaultTarget = targetEntry == null;
 
-    // Identify gap if score < 60%
-    const pct = maxScore > 0 ? (score / maxScore) * 100 : 100;
-    if (pct < 70) {
+    // 4. Gap against target
+    const gapScore = Math.max(0, targetScore - actualScore);
+    const gapPercentage = targetScore > 0 ? (gapScore / targetScore) * 100 : 0;
+    const gapLevel = classifyGapLevel(gapPercentage);
+
+    // 5. Accumulate category scores
+    categoryData[cat].totalScore += actualScore * qWeight;
+    categoryData[cat].maxScore += 100 * qWeight;
+
+    // 6. Legacy GapItem
+    if (gapPercentage > 0) {
       categoryData[cat].gaps.push({
         category: cat,
         questionId: question.id,
         questionText: question.questionText,
-        score: Math.round(score * 10) / 10,
-        maxScore: Math.round(maxScore * 10) / 10,
-        gapPercentage: Math.round((100 - pct) * 10) / 10,
+        score: Math.round(actualScore * 10) / 10,
+        maxScore: 100,
+        gapPercentage: Math.round(gapPercentage * 10) / 10,
       });
     }
+
+    // 7. Structured GapRecord (T2-2)
+    gapRecords.push({
+      questionId: question.id,
+      actualScore: Math.round(actualScore * 10) / 10,
+      targetScore,
+      gapScore: Math.round(gapScore * 10) / 10,
+      gapPercentage: Math.round(gapPercentage * 10) / 10,
+      selfScore: Math.round(selfScore * 10) / 10,
+      supervisorScore: supervisorScore != null ? Math.round(supervisorScore * 10) / 10 : null,
+      kpiScore: kpiScore != null ? Math.round(kpiScore * 10) / 10 : null,
+      category: cat,
+      gapLevel,
+      usedDefaultTarget,
+    });
   }
 
   // Compute category scores (0-100)
@@ -153,11 +242,11 @@ export function analyzeGaps(responsesWithQuestions: ResponseWithQuestion[]): Ana
 
   // Sort gaps by severity
   allGaps.sort((a, b) => b.gapPercentage - a.gapPercentage);
+  gapRecords.sort((a, b) => b.gapScore - a.gapScore);
 
-  // Generate summary
   const summary = generateSummary(overallScore, gapLevel, categoryScores, allGaps);
 
-  return { overallScore, gapLevel, categoryScores, identifiedGaps: allGaps, summary };
+  return { overallScore, gapLevel, categoryScores, identifiedGaps: allGaps, gapRecords, summary };
 }
 
 function generateSummary(
@@ -194,7 +283,8 @@ function generateSummary(
   }
 
   if (gaps.length > 0) {
-    summary += ` A total of ${gaps.length} specific skill gap${gaps.length > 1 ? "s" : ""} ${gaps.length > 1 ? "have" : "has"} been identified for targeted remediation.`;
+    const topGap = gaps[0];
+    summary += ` The most significant gap is in "${topGap.questionText}" (${topGap.gapPercentage.toFixed(1)}% gap vs. target proficiency).`;
   }
 
   return summary;
@@ -205,7 +295,7 @@ function generateSummary(
  */
 export function generateRecommendations(
   analysis: AnalysisResult,
-  survey: { sectorId: number; skillAreaId?: number | null }
+  survey: { sectorId: number; skillAreaId?: number | null; respondentPosition?: string | null; respondentYearsExperience?: number | null }
 ): Array<{
   priority: string;
   category?: string;

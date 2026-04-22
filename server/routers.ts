@@ -58,6 +58,26 @@ import {
   deleteGroupAnalysisSection,
   getScoringWeights,
   upsertScoringWeights,
+  // T2-1 Target Proficiency
+  getTargetProficiencies,
+  getTargetProficiencyById,
+  upsertTargetProficiency,
+  deleteTargetProficiency,
+  // T2-2 Competency Gap Records
+  saveCompetencyGapRecords,
+  getCompetencyGapRecordsByReport,
+  getCompetencyGapRecordsByGroup,
+  aggregateGroupGapRecords,
+  // T2-3 Prioritization Matrix
+  getPrioritizationMatrix,
+  upsertPrioritizationItem,
+  deletePrioritizationItem,
+  recomputeMatrixRanks,
+  generatePrioritizationMatrix,
+  // T2-4 Supervisor Validation
+  getSurveysForSupervisorValidation,
+  getSupervisorValidationProgress,
+  saveSupervisorScores,
 } from "./db";
 import { analyzeGaps, generateRecommendations } from "./tnaEngine";
 import {
@@ -1166,11 +1186,34 @@ Write in a professional but accessible tone. Use actual data numbers from the su
         const survey = await getSurveyById(input.surveyId);
         if (!survey) throw new TRPCError({ code: "NOT_FOUND" });
         if (survey.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-
         await updateSurveyStatus(input.surveyId, "completed");
-
         const responsesWithQuestions = await getSurveyResponses(input.surveyId);
-        const analysisResult = analyzeGaps(responsesWithQuestions);
+
+        // T2-1: Resolve target proficiencies for all questions in this survey
+        const questionIds = responsesWithQuestions.map(r => r.question?.id).filter(Boolean) as number[];
+        const targetRows = await getTargetProficiencies({ activeOnly: true });
+        const targetMap: import("./tnaEngine").TargetProficiencyMap = new Map();
+        for (const { tp } of targetRows) {
+          if (questionIds.includes(tp.questionId)) {
+            // Use the first match (most specific wins due to ordering in getTargetProficiencies)
+            if (!targetMap.has(tp.questionId)) {
+              targetMap.set(tp.questionId, { targetScore: tp.targetScore, usedDefaultTarget: false });
+            }
+          }
+        }
+
+        // T1-6: Load scoring weights
+        const weightsRow = await getScoringWeights();
+        const weights: import("./tnaEngine").ScoringWeightsInput = weightsRow
+          ? {
+              selfWeight: weightsRow.selfWeight,
+              supervisorWeight: weightsRow.supervisorWeight,
+              kpiWeight: weightsRow.kpiWeight,
+              fallbackToSelfOnly: weightsRow.fallbackToSelfOnly,
+            }
+          : { selfWeight: 1, supervisorWeight: 0, kpiWeight: 0, fallbackToSelfOnly: true };
+
+        const analysisResult = analyzeGaps(responsesWithQuestions as any, weights, targetMap);
 
         const reportId = await createReport({
           surveyId: input.surveyId,
@@ -1179,12 +1222,13 @@ Write in a professional but accessible tone. Use actual data numbers from the su
           skillAreaId: survey.skillAreaId,
           ...analysisResult,
         });
-
         if (!reportId) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        // T2-2: Persist structured gap records
+        await saveCompetencyGapRecords(reportId, input.surveyId, analysisResult.gapRecords);
 
         const recs = generateRecommendations(analysisResult, survey);
         await saveRecommendations(reportId, recs);
-
         return { reportId };
       }),
 
@@ -1862,6 +1906,198 @@ Requirements:
         return { success: true };
       }),
   }),
+  // ─── Target Proficiency Levels (T2-1) ─────────────────────────────────────
+  targetProficiency: router({
+    list: adminProcedure
+      .input(z.object({
+        questionId: z.number().optional(),
+        sectorId: z.number().optional(),
+        skillAreaId: z.number().optional(),
+        tnaRole: z.string().optional(),
+        activeOnly: z.boolean().optional().default(true),
+      }))
+      .query(({ input }) => getTargetProficiencies(input)),
+
+    getById: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const row = await getTargetProficiencyById(input.id);
+        if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+        return row;
+      }),
+
+    upsert: adminProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        questionId: z.number(),
+        sectorId: z.number().nullable().optional(),
+        skillAreaId: z.number().nullable().optional(),
+        tnaRole: z.string().nullable().optional(),
+        targetScore: z.number().min(0).max(100),
+        proficiencyLabel: z.string().max(100).nullable().optional(),
+        rationale: z.string().nullable().optional(),
+        isActive: z.boolean().optional().default(true),
+      }))
+      .mutation(({ ctx, input }) => upsertTargetProficiency({ ...input, userId: ctx.user.id })),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => deleteTargetProficiency(input.id)),
+  }),
+
+  // ─── Competency Gap Records (T2-2) ──────────────────────────────────────────
+  gapRecords: router({
+    byReport: protectedProcedure
+      .input(z.object({ reportId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        // Verify access
+        const report = await getReportById(input.reportId);
+        if (!report) throw new TRPCError({ code: "NOT_FOUND" });
+        if (report.report.userId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return getCompetencyGapRecordsByReport(input.reportId);
+      }),
+
+    byGroup: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(({ input }) => getCompetencyGapRecordsByGroup(input.groupId)),
+
+    aggregateByGroup: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(({ input }) => aggregateGroupGapRecords(input.groupId)),
+  }),
+
+  // ─── Prioritization Matrix (T2-3) ───────────────────────────────────────────
+  prioritization: router({
+    list: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(({ input }) => getPrioritizationMatrix(input.groupId)),
+
+    generate: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const count = await generatePrioritizationMatrix(input.groupId, ctx.user.id);
+        return { generated: count };
+      }),
+
+    upsert: adminProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        groupId: z.number(),
+        questionId: z.number().nullable().optional(),
+        trainingNeedLabel: z.string().min(1).max(500),
+        category: z.string().nullable().optional(),
+        urgencyScore: z.number().min(1).max(5),
+        impactScore: z.number().min(1).max(5),
+        feasibilityScore: z.number().min(1).max(5),
+        affectedCount: z.number().optional(),
+        avgGapPct: z.number().optional(),
+        status: z.enum(["pending", "approved", "in_progress", "completed", "deferred"]).optional(),
+        isManualOverride: z.boolean().optional(),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await upsertPrioritizationItem({ ...input, userId: ctx.user.id });
+        await recomputeMatrixRanks(input.groupId);
+        return result;
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number(), groupId: z.number() }))
+      .mutation(async ({ input }) => {
+        await deletePrioritizationItem(input.id);
+        await recomputeMatrixRanks(input.groupId);
+        return { success: true };
+      }),
+
+    updateStatus: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        groupId: z.number(),
+        status: z.enum(["pending", "approved", "in_progress", "completed", "deferred"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { prioritizationMatrix: pm } = await import("../drizzle/schema");
+        await db.update(pm)
+          .set({ status: input.status as any, updatedBy: ctx.user.id })
+          .where(eq(pm.id, input.id));
+        return { success: true };
+      }),
+  }),
+
+  // ─── Supervisor Validation (T2-4) ───────────────────────────────────────────
+  supervisorValidation: router({
+    // List surveys pending validation (for the logged-in supervisor)
+    mySurveys: protectedProcedure
+      .query(({ ctx }) => getSurveysForSupervisorValidation(ctx.user.id)),
+
+    // Admin: list all surveys for a group with validation progress
+    groupSurveys: adminProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ input }) => {
+        const groupReports = await getReportsByGroup(input.groupId);
+        const result = [];
+        for (const r of groupReports) {
+          if (!r.survey) continue;
+          const progress = await getSupervisorValidationProgress(r.survey.id);
+          result.push({
+            survey: r.survey,
+            user: r.user,
+            report: r.report,
+            validationProgress: progress,
+          });
+        }
+        return result;
+      }),
+
+    // Get survey responses with existing supervisor scores for validation
+    getSurveyForValidation: protectedProcedure
+      .input(z.object({ surveyId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const survey = await getSurveyById(input.surveyId);
+        if (!survey) throw new TRPCError({ code: "NOT_FOUND" });
+        // Only admins, hr_officers, or line_managers can validate others
+        const canValidate = ctx.user.role === "admin" ||
+          ctx.user.tnaRole === "hr_officer" ||
+          ctx.user.tnaRole === "line_manager";
+        if (!canValidate && survey.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        const responses = await getSurveyResponses(input.surveyId);
+        const progress = await getSupervisorValidationProgress(input.surveyId);
+        return { survey, responses, progress };
+      }),
+
+    // Submit supervisor scores for a survey
+    submitScores: protectedProcedure
+      .input(z.object({
+        surveyId: z.number(),
+        scores: z.array(z.object({
+          responseId: z.number(),
+          supervisorScore: z.number().min(0).max(100),
+          supervisorNotes: z.string().nullable().optional(),
+        })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const survey = await getSurveyById(input.surveyId);
+        if (!survey) throw new TRPCError({ code: "NOT_FOUND" });
+        const canValidate = ctx.user.role === "admin" ||
+          ctx.user.tnaRole === "hr_officer" ||
+          ctx.user.tnaRole === "line_manager";
+        if (!canValidate) throw new TRPCError({ code: "FORBIDDEN" });
+        await saveSupervisorScores(input.surveyId, ctx.user.id, input.scores);
+        return { success: true, count: input.scores.length };
+      }),
+
+    // Get validation progress for a specific survey
+    progress: protectedProcedure
+      .input(z.object({ surveyId: z.number() }))
+      .query(({ input }) => getSupervisorValidationProgress(input.surveyId)),
+  }),
+
   aiConfig: router({
     getSettings: protectedProcedure
       .query(async ({ ctx }) => {

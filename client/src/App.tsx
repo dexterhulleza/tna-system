@@ -28,6 +28,10 @@ import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
 import AdminTesdaLibrary from "./pages/admin/AdminTesdaLibrary";
 import AdminTaskMapping from "./pages/admin/AdminTaskMapping";
 import AdminScoringWeights from "./pages/admin/AdminScoringWeights";
+import AdminTargetProficiency from "./pages/admin/AdminTargetProficiency";
+import AdminGapRecords from "./pages/admin/AdminGapRecords";
+import AdminPrioritizationMatrix from "./pages/admin/AdminPrioritizationMatrix";
+import AdminSupervisorValidation from "./pages/admin/AdminSupervisorValidation";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -85,6 +89,11 @@ function Router() {
       <Route path="/admin/tesda-library" component={withAdminLayout(AdminTesdaLibrary)} />
       <Route path="/admin/task-mapping" component={withAdminLayout(AdminTaskMapping)} />
       <Route path="/admin/scoring-weights" component={withAdminLayout(AdminScoringWeights)} />
+      {/* TNA Engine pages (T2-1 to T2-4) */}
+      <Route path="/admin/target-proficiency" component={withAdminLayout(AdminTargetProficiency)} />
+      <Route path="/admin/gap-records" component={withAdminLayout(AdminGapRecords)} />
+      <Route path="/admin/prioritization" component={withAdminLayout(AdminPrioritizationMatrix)} />
+      <Route path="/admin/supervisor-validation" component={withAdminLayout(AdminSupervisorValidation)} />
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

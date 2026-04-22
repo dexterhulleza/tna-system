@@ -440,3 +440,94 @@ export const taskCompetencyMappings = mysqlTable("task_competency_mappings", {
 });
 export type TaskCompetencyMapping = typeof taskCompetencyMappings.$inferSelect;
 export type InsertTaskCompetencyMapping = typeof taskCompetencyMappings.$inferInsert;
+
+// ─── Target Proficiency Levels (T2-1) ────────────────────────────────────────
+// Defines the expected/target score for each question, optionally scoped by
+// sector, skill area, or TNA role. The gap engine compares actual scores
+// against these benchmarks instead of the raw max scale value.
+export const targetProficiencies = mysqlTable("target_proficiencies", {
+  id: int("id").autoincrement().primaryKey(),
+  // Which question this benchmark applies to
+  questionId: int("questionId").notNull().references(() => questions.id, { onDelete: "cascade" }),
+  // Optional scoping — null = applies to all
+  sectorId: int("sectorId").references(() => sectors.id, { onDelete: "cascade" }),
+  skillAreaId: int("skillAreaId").references(() => skillAreas.id, { onDelete: "cascade" }),
+  // TNA role scope (null = all roles)
+  tnaRole: varchar("tnaRole", { length: 60 }),
+  // The target score expressed as a percentage (0-100) of the question's scale
+  targetScore: float("targetScore").notNull().default(80.0),
+  // Optional label, e.g. "Proficient", "Competent", "Expert"
+  proficiencyLabel: varchar("proficiencyLabel", { length: 100 }),
+  // Rationale / source (e.g. "TESDA NC II standard", "Company policy")
+  rationale: text("rationale"),
+  isActive: boolean("isActive").notNull().default(true),
+  createdBy: int("createdBy").references(() => users.id),
+  updatedBy: int("updatedBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TargetProficiency = typeof targetProficiencies.$inferSelect;
+export type InsertTargetProficiency = typeof targetProficiencies.$inferInsert;
+
+// ─── Competency Gap Records (T2-2) ───────────────────────────────────────────
+// Persists individual question-level gap results as queryable rows.
+// One record per (report, question) pair — replaces the JSON blob in reports.identifiedGaps
+// for structured querying, trending, and drill-down.
+export const competencyGapRecords = mysqlTable("competency_gap_records", {
+  id: int("id").autoincrement().primaryKey(),
+  reportId: int("reportId").notNull().references(() => reports.id, { onDelete: "cascade" }),
+  surveyId: int("surveyId").notNull().references(() => surveys.id, { onDelete: "cascade" }),
+  questionId: int("questionId").notNull().references(() => questions.id, { onDelete: "cascade" }),
+  // Scores (all 0-100)
+  actualScore: float("actualScore").notNull(),        // weighted composite score
+  targetScore: float("targetScore").notNull(),        // from targetProficiencies (or default 80)
+  gapScore: float("gapScore").notNull(),              // targetScore - actualScore (positive = gap)
+  gapPercentage: float("gapPercentage").notNull(),    // gapScore / targetScore * 100
+  // Source breakdown
+  selfScore: float("selfScore"),
+  supervisorScore: float("supervisorScore"),
+  kpiScore: float("kpiScore"),
+  // Classification
+  category: varchar("category", { length: 100 }).notNull(),
+  gapLevel: mysqlEnum("gapLevel", ["critical", "high", "moderate", "low", "none"]).notNull(),
+  // Whether a target proficiency record was found (vs. default used)
+  usedDefaultTarget: boolean("usedDefaultTarget").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CompetencyGapRecord = typeof competencyGapRecords.$inferSelect;
+export type InsertCompetencyGapRecord = typeof competencyGapRecords.$inferInsert;
+
+// ─── Prioritization Matrix (T2-3) ────────────────────────────────────────────
+// Ranks training needs for a group by urgency × impact × feasibility.
+// HR Officers / Admins can override AI-computed scores and reorder items.
+export const prioritizationMatrix = mysqlTable("prioritization_matrix", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull().references(() => surveyGroups.id, { onDelete: "cascade" }),
+  // The competency / training need being ranked
+  questionId: int("questionId").references(() => questions.id, { onDelete: "set null" }),
+  // Human-readable label (may differ from question text after HR edits)
+  trainingNeedLabel: varchar("trainingNeedLabel", { length: 500 }).notNull(),
+  category: varchar("category", { length: 100 }),
+  // Scoring dimensions (1-5 scale)
+  urgencyScore: float("urgencyScore").notNull().default(3.0),     // how soon training is needed
+  impactScore: float("impactScore").notNull().default(3.0),       // business / performance impact
+  feasibilityScore: float("feasibilityScore").notNull().default(3.0), // ease of delivering training
+  // Computed: urgency * impact * feasibility (max 125)
+  priorityScore: float("priorityScore").notNull().default(27.0),
+  // Derived rank within the group (1 = highest priority)
+  rank: int("rank"),
+  // Supporting data
+  affectedCount: int("affectedCount").default(0),   // number of respondents with this gap
+  avgGapPct: float("avgGapPct").default(0),          // average gap % across affected respondents
+  // Status
+  status: mysqlEnum("status", ["pending", "approved", "in_progress", "completed", "deferred"]).notNull().default("pending"),
+  // Override flag: true if HR manually edited scores
+  isManualOverride: boolean("isManualOverride").notNull().default(false),
+  notes: text("notes"),
+  createdBy: int("createdBy").references(() => users.id),
+  updatedBy: int("updatedBy").references(() => users.id),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PrioritizationMatrix = typeof prioritizationMatrix.$inferSelect;
+export type InsertPrioritizationMatrix = typeof prioritizationMatrix.$inferInsert;

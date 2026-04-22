@@ -4,7 +4,9 @@ import {
   InsertUser,
   adminPermissions,
   aiSettings,
+  competencyGapRecords,
   groupAnalysisSections,
+  prioritizationMatrix,
   questions,
   recommendations,
   reports,
@@ -15,6 +17,7 @@ import {
   surveyGroups,
   surveyResponses,
   surveys,
+  targetProficiencies,
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -1055,4 +1058,363 @@ export function computeWeightedScore(
     weightedSum += kpiScore! * weights.kpiWeight;
   }
   return totalWeight > 0 ? weightedSum / totalWeight : selfScore;
+}
+
+// ─── Target Proficiency Levels (T2-1) ────────────────────────────────────────
+export async function getTargetProficiencies(filters: {
+  questionId?: number;
+  sectorId?: number;
+  skillAreaId?: number;
+  tnaRole?: string;
+  activeOnly?: boolean;
+} = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (filters.activeOnly !== false) conditions.push(eq(targetProficiencies.isActive, true));
+  if (filters.questionId != null) conditions.push(eq(targetProficiencies.questionId, filters.questionId));
+  if (filters.sectorId != null) conditions.push(eq(targetProficiencies.sectorId, filters.sectorId));
+  if (filters.skillAreaId != null) conditions.push(eq(targetProficiencies.skillAreaId, filters.skillAreaId));
+  if (filters.tnaRole) conditions.push(eq(targetProficiencies.tnaRole, filters.tnaRole));
+  return db
+    .select({ tp: targetProficiencies, question: questions })
+    .from(targetProficiencies)
+    .leftJoin(questions, eq(targetProficiencies.questionId, questions.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(targetProficiencies.questionId);
+}
+
+export async function getTargetProficiencyById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select().from(targetProficiencies).where(eq(targetProficiencies.id, id));
+  return row ?? null;
+}
+
+/** Resolve the best-matching target score for a question given context.
+ *  Priority: sector+role > sector > role > global > default 80 */
+export async function resolveTargetScore(
+  questionId: number,
+  sectorId?: number | null,
+  tnaRole?: string | null
+): Promise<{ targetScore: number; usedDefaultTarget: boolean }> {
+  const db = await getDb();
+  if (!db) return { targetScore: 80, usedDefaultTarget: true };
+  const rows = await db
+    .select()
+    .from(targetProficiencies)
+    .where(and(eq(targetProficiencies.questionId, questionId), eq(targetProficiencies.isActive, true)));
+  if (rows.length === 0) return { targetScore: 80, usedDefaultTarget: true };
+  // Score matching specificity
+  const score = (row: typeof rows[0]) => {
+    let s = 0;
+    if (sectorId && row.sectorId === sectorId) s += 10;
+    if (tnaRole && row.tnaRole === tnaRole) s += 5;
+    if (!row.sectorId && !row.tnaRole) s += 0; // global
+    return s;
+  };
+  const best = rows.sort((a, b) => score(b) - score(a))[0];
+  return { targetScore: best.targetScore, usedDefaultTarget: false };
+}
+
+export async function upsertTargetProficiency(data: {
+  id?: number;
+  questionId: number;
+  sectorId?: number | null;
+  skillAreaId?: number | null;
+  tnaRole?: string | null;
+  targetScore: number;
+  proficiencyLabel?: string | null;
+  rationale?: string | null;
+  isActive?: boolean;
+  userId: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  const { id, userId, ...rest } = data;
+  if (id) {
+    await db.update(targetProficiencies)
+      .set({ ...rest, updatedBy: userId })
+      .where(eq(targetProficiencies.id, id));
+    return { id };
+  } else {
+    const [result] = await db.insert(targetProficiencies).values({
+      ...rest,
+      createdBy: userId,
+      updatedBy: userId,
+    } as any);
+    return { id: (result as any).insertId as number };
+  }
+}
+
+export async function deleteTargetProficiency(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(targetProficiencies).where(eq(targetProficiencies.id, id));
+}
+
+// ─── Competency Gap Records (T2-2) ───────────────────────────────────────────
+export async function saveCompetencyGapRecords(
+  reportId: number,
+  surveyId: number,
+  records: Array<{
+    questionId: number;
+    actualScore: number;
+    targetScore: number;
+    gapScore: number;
+    gapPercentage: number;
+    selfScore?: number | null;
+    supervisorScore?: number | null;
+    kpiScore?: number | null;
+    category: string;
+    gapLevel: string;
+    usedDefaultTarget: boolean;
+  }>
+) {
+  const db = await getDb();
+  if (!db) return;
+  // Delete existing records for this report
+  await db.delete(competencyGapRecords).where(eq(competencyGapRecords.reportId, reportId));
+  if (records.length === 0) return;
+  await db.insert(competencyGapRecords).values(
+    records.map((r) => ({ ...r, reportId, surveyId } as any))
+  );
+}
+
+export async function getCompetencyGapRecordsByReport(reportId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ gap: competencyGapRecords, question: questions })
+    .from(competencyGapRecords)
+    .leftJoin(questions, eq(competencyGapRecords.questionId, questions.id))
+    .where(eq(competencyGapRecords.reportId, reportId))
+    .orderBy(desc(competencyGapRecords.gapScore));
+}
+
+export async function getCompetencyGapRecordsByGroup(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  // Join through surveys to filter by groupId
+  return db
+    .select({ gap: competencyGapRecords, question: questions })
+    .from(competencyGapRecords)
+    .leftJoin(questions, eq(competencyGapRecords.questionId, questions.id))
+    .leftJoin(surveys, eq(competencyGapRecords.surveyId, surveys.id))
+    .where(eq(surveys.groupId, groupId))
+    .orderBy(desc(competencyGapRecords.gapScore));
+}
+
+/** Aggregate gap records for a group: returns top gaps with frequency and avg gap */
+export async function aggregateGroupGapRecords(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await getCompetencyGapRecordsByGroup(groupId);
+  const freq: Record<number, {
+    questionId: number;
+    questionText: string;
+    category: string;
+    count: number;
+    totalGap: number;
+    totalActual: number;
+    totalTarget: number;
+  }> = {};
+  for (const { gap, question } of rows) {
+    const qid = gap.questionId;
+    if (!freq[qid]) {
+      freq[qid] = {
+        questionId: qid,
+        questionText: question?.questionText ?? `Q${qid}`,
+        category: gap.category,
+        count: 0,
+        totalGap: 0,
+        totalActual: 0,
+        totalTarget: 0,
+      };
+    }
+    freq[qid].count += 1;
+    freq[qid].totalGap += gap.gapScore;
+    freq[qid].totalActual += gap.actualScore;
+    freq[qid].totalTarget += gap.targetScore;
+  }
+  return Object.values(freq)
+    .map((f) => ({
+      questionId: f.questionId,
+      questionText: f.questionText,
+      category: f.category,
+      affectedCount: f.count,
+      avgGapScore: Math.round((f.totalGap / f.count) * 10) / 10,
+      avgActualScore: Math.round((f.totalActual / f.count) * 10) / 10,
+      avgTargetScore: Math.round((f.totalTarget / f.count) * 10) / 10,
+    }))
+    .sort((a, b) => b.avgGapScore - a.avgGapScore);
+}
+
+// ─── Prioritization Matrix (T2-3) ────────────────────────────────────────────
+export async function getPrioritizationMatrix(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ item: prioritizationMatrix, question: questions })
+    .from(prioritizationMatrix)
+    .leftJoin(questions, eq(prioritizationMatrix.questionId, questions.id))
+    .where(eq(prioritizationMatrix.groupId, groupId))
+    .orderBy(prioritizationMatrix.rank, desc(prioritizationMatrix.priorityScore));
+}
+
+export async function upsertPrioritizationItem(data: {
+  id?: number;
+  groupId: number;
+  questionId?: number | null;
+  trainingNeedLabel: string;
+  category?: string | null;
+  urgencyScore: number;
+  impactScore: number;
+  feasibilityScore: number;
+  affectedCount?: number;
+  avgGapPct?: number;
+  status?: string;
+  isManualOverride?: boolean;
+  notes?: string | null;
+  userId: number;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+  const { id, userId, ...rest } = data;
+  const priorityScore = rest.urgencyScore * rest.impactScore * rest.feasibilityScore;
+  if (id) {
+    await db.update(prioritizationMatrix)
+      .set({ ...rest, priorityScore, updatedBy: userId } as any)
+      .where(eq(prioritizationMatrix.id, id));
+    return { id };
+  } else {
+    const [result] = await db.insert(prioritizationMatrix).values({
+      ...rest,
+      priorityScore,
+      createdBy: userId,
+      updatedBy: userId,
+    } as any);
+    return { id: (result as any).insertId as number };
+  }
+}
+
+export async function deletePrioritizationItem(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(prioritizationMatrix).where(eq(prioritizationMatrix.id, id));
+}
+
+/** Recompute ranks for all items in a group after any change */
+export async function recomputeMatrixRanks(groupId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const items = await db
+    .select({ id: prioritizationMatrix.id, priorityScore: prioritizationMatrix.priorityScore })
+    .from(prioritizationMatrix)
+    .where(eq(prioritizationMatrix.groupId, groupId))
+    .orderBy(desc(prioritizationMatrix.priorityScore));
+  for (let i = 0; i < items.length; i++) {
+    await db.update(prioritizationMatrix)
+      .set({ rank: i + 1 })
+      .where(eq(prioritizationMatrix.id, items[i].id));
+  }
+}
+
+/** Auto-generate prioritization matrix from aggregated gap records for a group */
+export async function generatePrioritizationMatrix(groupId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const aggregated = await aggregateGroupGapRecords(groupId);
+  if (aggregated.length === 0) return 0;
+  // Get total respondents for this group
+  const groupReports = await getReportsByGroup(groupId);
+  const totalRespondents = groupReports.length || 1;
+  // Delete existing non-manual-override items
+  await db.delete(prioritizationMatrix)
+    .where(and(eq(prioritizationMatrix.groupId, groupId), eq(prioritizationMatrix.isManualOverride, false)));
+  // Insert new items derived from gap data
+  for (const gap of aggregated) {
+    const affectedPct = gap.affectedCount / totalRespondents;
+    // Urgency: based on avg gap score (higher gap = more urgent)
+    const urgency = Math.min(5, Math.max(1, Math.round((gap.avgGapScore / 20) * 5)));
+    // Impact: based on affected percentage (more people = higher impact)
+    const impact = Math.min(5, Math.max(1, Math.round(affectedPct * 5)));
+    // Feasibility: default 3 (neutral) — HR can override
+    const feasibility = 3;
+    const priorityScore = urgency * impact * feasibility;
+    await db.insert(prioritizationMatrix).values({
+      groupId,
+      questionId: gap.questionId,
+      trainingNeedLabel: gap.questionText,
+      category: gap.category,
+      urgencyScore: urgency,
+      impactScore: impact,
+      feasibilityScore: feasibility,
+      priorityScore,
+      affectedCount: gap.affectedCount,
+      avgGapPct: gap.avgGapScore,
+      status: "pending",
+      isManualOverride: false,
+      createdBy: userId,
+      updatedBy: userId,
+    } as any);
+  }
+  await recomputeMatrixRanks(groupId);
+  return aggregated.length;
+}
+
+// ─── Supervisor Validation (T2-4) ────────────────────────────────────────────
+/** Get all surveys pending supervisor validation for a given supervisor user */
+export async function getSurveysForSupervisorValidation(supervisorUserId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  // Find surveys in the same group(s) as the supervisor's assigned group
+  // where at least one response has no supervisorScore yet
+  const supervisorUser = await getUserById(supervisorUserId);
+  if (!supervisorUser) return [];
+  // Get all completed surveys in the supervisor's group
+  const conditions = [eq(surveys.status, "completed" as any)];
+  if (supervisorUser.groupId) {
+    conditions.push(eq(surveys.groupId, supervisorUser.groupId));
+  }
+  return db
+    .select({ survey: surveys, user: users })
+    .from(surveys)
+    .leftJoin(users, eq(surveys.userId, users.id))
+    .where(and(...conditions))
+    .orderBy(desc(surveys.completedAt));
+}
+
+/** Get validation progress for a survey: how many responses have supervisor scores */
+export async function getSupervisorValidationProgress(surveyId: number) {
+  const db = await getDb();
+  if (!db) return { total: 0, validated: 0 };
+  const allResponses = await db
+    .select({ id: surveyResponses.id, supervisorScore: surveyResponses.supervisorScore })
+    .from(surveyResponses)
+    .where(eq(surveyResponses.surveyId, surveyId));
+  const total = allResponses.length;
+  const validated = allResponses.filter((r) => r.supervisorScore != null).length;
+  return { total, validated };
+}
+
+/** Save supervisor scores for a batch of responses */
+export async function saveSupervisorScores(
+  surveyId: number,
+  supervisorId: number,
+  scores: Array<{ responseId: number; supervisorScore: number; supervisorNotes?: string | null }>
+) {
+  const db = await getDb();
+  if (!db) return;
+  const now = new Date();
+  for (const s of scores) {
+    await db.update(surveyResponses)
+      .set({
+        supervisorScore: s.supervisorScore,
+        supervisorNotes: s.supervisorNotes ?? null,
+        supervisorId,
+        supervisorValidatedAt: now,
+      })
+      .where(and(eq(surveyResponses.id, s.responseId), eq(surveyResponses.surveyId, surveyId)));
+  }
 }
